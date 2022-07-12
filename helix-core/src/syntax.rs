@@ -126,6 +126,9 @@ pub struct LanguageConfiguration {
     pub auto_pairs: Option<AutoPairs>,
 
     pub rulers: Option<Vec<u16>>, // if set, override editor's rulers
+
+    /// If set, overrides rainbow brackets for a language.
+    pub rainbow_brackets: Option<bool>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
