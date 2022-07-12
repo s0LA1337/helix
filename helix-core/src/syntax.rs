@@ -169,6 +169,9 @@ pub struct LanguageConfiguration {
     pub workspace_lsp_roots: Option<Vec<PathBuf>>,
     #[serde(default)]
     pub persistent_diagnostic_sources: Vec<String>,
+
+    /// If set, overrides rainbow brackets for a language.
+    pub rainbow_brackets: Option<bool>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
