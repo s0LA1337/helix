@@ -234,6 +234,8 @@ pub struct LspConfig {
     pub auto_signature_help: bool,
     /// Display docs under signature help popup
     pub display_signature_help_docs: bool,
+    /// Display context of current cursor line if it is outside the view.
+    pub context: bool,
 }
 
 impl Default for LspConfig {
@@ -242,6 +244,7 @@ impl Default for LspConfig {
             display_messages: false,
             auto_signature_help: true,
             display_signature_help_docs: true,
+            context: false,
         }
     }
 }
