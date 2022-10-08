@@ -51,6 +51,7 @@ use movement::Movement;
 use crate::{
     args,
     compositor::{self, Component, Compositor},
+    config::KeymapConfig,
     filter_picker_entry,
     job::Callback,
     keymap::ReverseKeymap,
@@ -84,6 +85,7 @@ pub struct Context<'a> {
     pub register: Option<char>,
     pub count: Option<NonZeroUsize>,
     pub editor: &'a mut Editor,
+    pub keymap_config: &'a KeymapConfig,
 
     pub callback: Option<crate::compositor::Callback>,
     pub on_next_key_callback: Option<OnKeyCallback>,
@@ -199,6 +201,7 @@ impl MappableCommand {
                         editor: cx.editor,
                         jobs: cx.jobs,
                         scroll: None,
+                        keymap_config: cx.keymap_config,
                     };
                     if let Err(e) = (command.fun)(&mut cx, &args[..], PromptEvent::Validate) {
                         cx.editor.set_error(format!("{}", e));
@@ -2732,6 +2735,7 @@ pub fn command_palette(cx: &mut Context) {
                     callback: None,
                     on_next_key_callback: None,
                     jobs: cx.jobs,
+                    keymap_config: cx.keymap_config,
                 };
                 let focus = view!(ctx.editor).id;
 
@@ -3334,14 +3338,33 @@ pub mod insert {
     }
 
     pub fn insert_tab(cx: &mut Context) {
+        let (view, doc) = current_ref!(cx.editor);
+        let view_id = view.id;
+
+        if let Some(ref cmd) = cx.keymap_config.supertab {
+            let cursors_after_whitespace = doc.selection(view_id).ranges().iter().all(|range| {
+                let cursor = range.cursor(doc.text().slice(..));
+                let current_line_num = doc.text().char_to_line(cursor);
+                let current_line_start = doc.text().line_to_char(current_line_num);
+                let left = doc.text().slice(current_line_start..cursor);
+                log::debug!("left: {:?}", left);
+                left.chars().all(|c| c.is_whitespace())
+            });
+
+            if !cursors_after_whitespace {
+                cmd.execute(cx);
+                return;
+            }
+        }
+
         let (view, doc) = current!(cx.editor);
+
         // TODO: round out to nearest indentation level (for example a line with 3 spaces should
         // indent by one to reach 4 spaces).
-
         let indent = Tendril::from(doc.indent_style.as_str());
         let transaction = Transaction::insert(
             doc.text(),
-            &doc.selection(view.id).clone().cursors(doc.text().slice(..)),
+            &doc.selection(view_id).clone().cursors(doc.text().slice(..)),
             indent,
         );
         doc.apply(&transaction, view.id);

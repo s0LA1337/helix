@@ -344,3 +344,57 @@ max-wrap = 25 # increase value to reduce forced mid-word wrapping
 max-indent-retain = 0
 wrap-indicator = ""  # set wrap-indicator to "" to hide it
 ```
+
+## Keymap config
+
+This section contains configuration that have to do with the behavior of some
+key bindings, but not with key bindings themselves. For keybindings, see [Key
+remapping].
+
+[Key remapping]: ./keymap.md
+
+### `[keys]` Section
+
+
+| Key        | Description | Default |
+|------------|-------------|---------|
+| `supertab` | If set to a command name, then when the cursor is in a position with non-whitespace to its left, instead of inserting a tab, it will run the given command. If there is only whitespace to the left, then it inserts a tab as normal. One can emulate a tabout behavior with this with the `move_parent_node_end` command. See [Tabout Example] | `None` |
+
+[Tabout Example]: #tabout-example
+
+#### Tabout example
+
+This example demonstrates how to configure `supertab` to achieve behavior
+like the "tabout" feature in other editors, where one can escape the current
+bracket or code block by pressing the `tab` key. When the cursor only contains
+whitespace to its left, it will insert a tab like normal; otherwise, it will
+move the cursor to the end of the current Tree-sitter node.
+
+Note that without a terminal that supports the
+[Kitty Keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/),
+`C-i` and `tab` are the same mapping, so binding `tab` in normal mode conflicts
+with the default binding for `jump_forward`. `go` and `gi` are an alternative.
+
+```toml
+[keys]
+supertab = "move_parent_node_end"
+
+[keys.normal]
+tab = "move_parent_node_end"
+S-tab = "move_parent_node_start"
+
+[keys.normal.g]
+o = "jump_backward"
+i = "jump_forward"
+
+[keys.insert]
+S-tab = "move_parent_node_start"
+
+[keys.select]
+tab = "extend_parent_node_end"
+S-tab = "extend_parent_node_start"
+
+[keys.select.g]
+o = "jump_backward"
+i = "jump_forward"
+```

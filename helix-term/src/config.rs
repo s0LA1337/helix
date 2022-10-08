@@ -1,4 +1,4 @@
-use crate::keymap;
+use crate::keymap::{self, MappableCommand};
 use crate::keymap::{merge_keys, Keymap};
 use helix_loader::merge_toml_values;
 use helix_view::document::Mode;
@@ -26,6 +26,10 @@ pub struct ConfigRaw {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct KeymapConfig {
+    /// An alternative command to run when tab is pressed and the cursor has
+    /// text other than whitespace to its left on the current line.
+    pub supertab: Option<MappableCommand>,
+
     #[serde(flatten)]
     pub bindings: HashMap<Mode, Keymap>,
 }
@@ -33,6 +37,7 @@ pub struct KeymapConfig {
 impl Default for KeymapConfig {
     fn default() -> KeymapConfig {
         KeymapConfig {
+            supertab: None,
             bindings: keymap::default(),
         }
     }
@@ -70,23 +75,27 @@ impl Config {
         let local_config: Result<ConfigRaw, ConfigLoadError> =
             local.and_then(|file| toml::from_str(&file).map_err(ConfigLoadError::BadConfig));
 
+        let mut result_keymap_config = KeymapConfig::default();
+
+        let mut merge_keymap_configs = |config: &ConfigRaw| {
+            let result_keymap_config = &mut result_keymap_config;
+
+            if let Some(ref keymap_config) = config.keys {
+                if let Some(supertab_config) = &keymap_config.supertab {
+                    result_keymap_config.supertab = Some(supertab_config.clone());
+                }
+
+                merge_keys(
+                    &mut result_keymap_config.bindings,
+                    keymap_config.bindings.clone(),
+                )
+            }
+        };
+
         let res = match (global_config, local_config) {
             (Ok(global), Ok(local)) => {
-                let mut keys = keymap::default();
-
-                if let Some(KeymapConfig {
-                    bindings: global_keys,
-                }) = global.keys
-                {
-                    merge_keys(&mut keys, global_keys)
-                }
-
-                if let Some(KeymapConfig {
-                    bindings: local_keys,
-                }) = local.keys
-                {
-                    merge_keys(&mut keys, local_keys)
-                }
+                merge_keymap_configs(&global);
+                merge_keymap_configs(&local);
 
                 let editor = match (global.editor, local.editor) {
                     (None, None) => helix_view::editor::Config::default(),
@@ -100,7 +109,7 @@ impl Config {
 
                 Config {
                     theme: local.theme.or(global.theme),
-                    keys: KeymapConfig { bindings: keys },
+                    keys: result_keymap_config,
                     editor,
                 }
             }
@@ -110,24 +119,18 @@ impl Config {
                 return Err(ConfigLoadError::BadConfig(err))
             }
             (Ok(config), Err(_)) | (Err(_), Ok(config)) => {
-                let mut keys = keymap::default();
-
-                if let Some(KeymapConfig {
-                    bindings: config_keys,
-                }) = config.keys
-                {
-                    merge_keys(&mut keys, config_keys)
-                }
+                merge_keymap_configs(&config);
 
                 Config {
                     theme: config.theme,
-                    keys: KeymapConfig { bindings: keys },
+                    keys: result_keymap_config,
                     editor: config.editor.map_or_else(
                         || Ok(helix_view::editor::Config::default()),
                         |val| val.try_into().map_err(ConfigLoadError::BadConfig),
                     )?,
                 }
             }
+
             // these are just two io errors return the one for the global config
             (Err(err), Err(_)) => return Err(err),
         };
@@ -170,9 +173,10 @@ mod tests {
             A-F12 = "move_next_word_end"
         "#;
 
-        let mut keys = keymap::default();
+        let mut keymap_config = KeymapConfig::default();
+
         merge_keys(
-            &mut keys,
+            &mut keymap_config.bindings,
             hashmap! {
                 Mode::Insert => Keymap::new(keymap!({ "Insert mode"
                     "y" => move_line_down,
@@ -187,7 +191,7 @@ mod tests {
         assert_eq!(
             Config::load_test(sample_keymaps),
             Config {
-                keys: KeymapConfig { bindings: keys },
+                keys: keymap_config,
                 ..Default::default()
             }
         );
