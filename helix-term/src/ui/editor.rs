@@ -17,7 +17,7 @@ use helix_core::{
 };
 use helix_view::{
     document::{Mode, SCRATCH_BUFFER_NAME},
-    editor::{CompleteAction, CursorShapeConfig},
+    editor::{CompleteAction, CursorShapeConfig, RainbowIndentOptions},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
@@ -443,9 +443,17 @@ impl EditorView {
             // TODO: limit to a max indent level too. It doesn't cause visual artifacts but it would avoid some
             // extra loops if the code is deeply nested.
 
+            let modifier = if config.indent_guides.rainbow == RainbowIndentOptions::Dim {
+                Modifier::DIM
+            } else {
+                Modifier::empty()
+            };
+
             for i in starting_indent..(indent_level / tab_width as u16) {
-                let style = if config.indent_guides.rainbow {
-                    indent_guide_style.patch(theme.get_rainbow(i as usize))
+                let style = if config.indent_guides.rainbow != RainbowIndentOptions::None {
+                    indent_guide_style
+                        .patch(theme.get_rainbow(i as usize))
+                        .add_modifier(modifier)
                 } else {
                     indent_guide_style
                 };
