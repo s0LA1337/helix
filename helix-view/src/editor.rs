@@ -571,7 +571,6 @@ pub struct IndentGuidesConfig {
     pub render: bool,
     pub character: char,
     pub rainbow: RainbowIndentOptions,
-    pub skip_levels: u16,
     pub skip_levels: u8,
 }
 

@@ -25,7 +25,7 @@ use helix_view::{
     keyboard::{KeyCode, KeyModifiers},
     Document, Editor, Theme, View,
 };
-use std::{borrow::Cow, cmp::min, num::NonZeroUsize, path::PathBuf};
+use std::{borrow::Cow, num::NonZeroUsize, path::PathBuf};
 
 use tui::buffer::Buffer as Surface;
 
@@ -475,7 +475,7 @@ impl EditorView {
                 Modifier::empty()
             };
 
-            for i in starting_indent..(indent_level / tab_width as u16) {
+            for i in starting_indent..(indent_level / tab_width) {
                 let style = if config.indent_guides.rainbow != RainbowIndentOptions::None {
                     indent_guide_style
                         .patch(theme.get_rainbow(i as usize))
@@ -485,7 +485,7 @@ impl EditorView {
                 };
 
                 surface.set_string(
-                    viewport.x + (i * tab_width as u16) - offset.col as u16,
+                    viewport.x + (i as u16 * tab_width as u16) - offset.col as u16,
                     viewport.y + line,
                     &indent_guide_char,
                     style,
