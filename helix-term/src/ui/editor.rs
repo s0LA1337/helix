@@ -20,12 +20,13 @@ use helix_view::{
     apply_transaction,
     document::{Mode, SCRATCH_BUFFER_NAME},
     editor::{CompleteAction, CursorShapeConfig, LineNumber},
+    editor::{CompleteAction, CursorShapeConfig, RainbowIndentOptions},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
     Document, Editor, Theme, View,
 };
-use std::{borrow::Cow, cmp::min, num::NonZeroUsize, path::PathBuf};
+use std::{borrow::Cow, num::NonZeroUsize, path::PathBuf};
 
 use tui::buffer::Buffer as Surface;
 
@@ -631,19 +632,27 @@ impl EditorView {
             let starting_indent =
                 (offset.col / tab_width) + config.indent_guides.skip_levels as usize;
 
-            // Don't draw indent guides outside of view
-            let end_indent = min(
-                indent_level,
-                // Add tab_width - 1 to round up, since the first visible
-                // indent might be a bit after offset.col
-                offset.col + viewport.width as usize + (tab_width - 1),
-            ) / tab_width;
+            let modifier = if config.indent_guides.rainbow == RainbowIndentOptions::Dim {
+                Modifier::DIM
+            } else {
+                Modifier::empty()
+            };
 
-            for i in starting_indent..end_indent {
-                let x = (viewport.x as usize + (i * tab_width) - offset.col) as u16;
-                let y = viewport.y + line;
-                debug_assert!(surface.in_bounds(x, y));
-                surface.set_string(x, y, &indent_guide_char, indent_guide_style);
+            for i in starting_indent..(indent_level / tab_width) {
+                let style = if config.indent_guides.rainbow != RainbowIndentOptions::None {
+                    indent_guide_style
+                        .patch(theme.get_rainbow(i as usize))
+                        .add_modifier(modifier)
+                } else {
+                    indent_guide_style
+                };
+
+                surface.set_string(
+                    viewport.x + (i as u16 * tab_width as u16) - offset.col as u16,
+                    viewport.y + line,
+                    &indent_guide_char,
+                    style,
+                );
             }
         };
 

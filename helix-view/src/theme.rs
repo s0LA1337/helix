@@ -188,6 +188,7 @@ pub struct Theme {
     styles: HashMap<String, Style>,
     // tree-sitter highlight styles are stored in a Vec to optimize lookups
     scopes: Vec<String>,
+    rainbow_length: usize,
     highlights: Vec<Style>,
     rainbow_length: usize,
 }
@@ -202,6 +203,7 @@ impl From<Value> for Theme {
         Self {
             styles,
             scopes,
+            rainbow_length,
             highlights,
             rainbow_length,
             ..Default::default()
@@ -214,13 +216,17 @@ impl<'de> Deserialize<'de> for Theme {
     where
         D: Deserializer<'de>,
     {
-        let values = HashMap::<String, Value>::deserialize(deserializer)?;
+        let mut styles = HashMap::new();
+        let mut scopes = Vec::new();
+        let mut highlights = Vec::new();
+        let mut rainbow_length = 0;
 
         let (styles, scopes, highlights, rainbow_length) = build_theme_values(Ok(values));
 
         Ok(Self {
             styles,
             scopes,
+            rainbow_length,
             highlights,
             rainbow_length,
             ..Default::default()

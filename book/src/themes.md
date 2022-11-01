@@ -107,6 +107,17 @@ Some styles might not be supported by your terminal emulator.
 | `double_line`  |
 
 
+### Rainbow
+
+The `rainbow` key is used for rainbow highlight for matching brackets.
+The key is a list of styles.
+
+```toml
+rainbow = ["#ff0000", "#ffa500", "#fff000", { fg = "#00ff00", modifiers = ["bold"] }]
+```
+
+Colors from the palette and modifiers may be used.
+
 ### Inheritance
 
 Extend upon other themes by setting the `inherits` property to an existing theme.
