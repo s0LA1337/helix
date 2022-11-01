@@ -59,6 +59,7 @@ on unix operating systems.
 | `color-modes` | Whether to color the mode indicator with different colors depending on the mode itself | `false` |
 | `rainbow-brackets` | Whether to render rainbow colors for matching brackets. Requires tree-sitter `rainbows.scm` queries for the language. | `false` |
 | `popup-border` | Draw border around `popup`, `menu`, `all`, or `none` | `none` |
+| `sticky-context` | Display context of current line if outside the view | `false` |
 
 ### `[editor.statusline]` Section
 

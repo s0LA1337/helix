@@ -243,6 +243,8 @@ pub struct Config {
     pub popup_border: PopupBorderConfig,
     /// explore config
     pub explorer: ExplorerConfig,
+    /// Display context of current cursor line if it is outside the view.
+    pub sticky_context: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -691,6 +693,7 @@ impl Default for Config {
             rainbow_brackets: true,
             popup_border: PopupBorderConfig::None,
             explorer: ExplorerConfig::default(),
+            sticky_context: false,
         }
     }
 }

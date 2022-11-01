@@ -19,7 +19,7 @@ use helix_core::{
 use helix_view::{
     apply_transaction,
     document::{Mode, SCRATCH_BUFFER_NAME},
-    editor::{CompleteAction, CursorShapeConfig},
+    editor::{CompleteAction, CursorShapeConfig, LineNumber},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
@@ -165,7 +165,13 @@ impl EditorView {
             highlights,
             &editor.config(),
         );
-        Self::render_gutter(editor, doc, view, view.area, surface, theme, is_focused);
+
+        let mut context_ln = None;
+        if editor.config().sticky_context {
+            context_ln = Self::render_sticky_context(editor, doc, view, surface, theme);
+        }
+
+        Self::render_gutter(editor, doc, view, surface, theme, is_focused, context_ln);
         Self::render_rulers(editor, doc, view, inner, surface, theme);
 
         if is_focused {
@@ -483,6 +489,89 @@ impl EditorView {
         spans
     }
 
+    pub fn render_sticky_context(
+        editor: &Editor,
+        doc: &Document,
+        view: &View,
+        surface: &mut Surface,
+        theme: &Theme,
+    ) -> Option<Vec<usize>> {
+        let syntax = doc.syntax()?;
+        let tree = syntax.tree();
+        let text = doc.text().slice(..);
+        let cursor_byte = doc.selection(view.id).primary().cursor(text);
+        let context_nodes = doc
+            .language_config()
+            .and_then(|lc| lc.sticky_context_nodes.as_ref());
+
+        let mut parent = tree
+            .root_node()
+            .descendant_for_byte_range(cursor_byte, cursor_byte)
+            .and_then(|n| n.parent());
+
+        // context is list of numbers of lines that should be rendered in the LSP context
+        let mut context: Vec<usize> = Vec::new();
+
+        while let Some(node) = parent {
+            let line = text.byte_to_line(node.start_byte());
+
+            // if parent of previous node is still on the same line, use the parent node
+            if let Some(&prev_line) = context.last() {
+                if prev_line == line {
+                    context.pop();
+                }
+            }
+
+            if context_nodes.map_or(true, |nodes| nodes.iter().any(|n| n == node.kind())) {
+                context.push(line);
+            }
+
+            parent = node.parent();
+        }
+
+        // we render from top most (last in the list)
+        context.reverse();
+
+        // TODO: this probably needs it's own style, although it seems to work well even with cursorline
+        let context_style = theme.get("ui.cursorline.primary");
+        let mut context_area = view.inner_area();
+        context_area.height = 1;
+
+        let mut line_numbers = Vec::new();
+        for line_num in context {
+            if line_num >= view.offset.row {
+                continue;
+            }
+            surface.clear_with(context_area, context_style);
+
+            let offset = Position::new(line_num, 0);
+            let highlights = Self::doc_syntax_highlights(doc, offset, 1, theme);
+            Self::render_text_highlights(
+                doc,
+                offset,
+                context_area,
+                surface,
+                theme,
+                highlights,
+                &editor.config(),
+            );
+
+            context_area.y += 1;
+            let line_number = match editor.config().line_number {
+                LineNumber::Absolute => line_num,
+                LineNumber::Relative => {
+                    let res = text.byte_to_line(cursor_byte) - line_num;
+                    match res {
+                        n if n < 2 => 1,
+                        _ => res - 1,
+                    }
+                }
+            };
+            line_numbers.push(line_number);
+        }
+        Some(line_numbers)
+    }
+
     pub fn render_text_highlights<H: Iterator<Item = HighlightEvent>>(
         doc: &Document,
         offset: Position,
@@ -784,13 +873,14 @@ impl EditorView {
         editor: &Editor,
         doc: &Document,
         view: &View,
-        viewport: Rect,
         surface: &mut Surface,
         theme: &Theme,
         is_focused: bool,
+        context_ln: Option<Vec<usize>>,
     ) {
         let text = doc.text().slice(..);
         let last_line = view.last_line(doc);
+        let viewport = view.area;
 
         // it's used inside an iterator so the collect isn't needless:
         // https://github.com/rust-lang/rust-clippy/issues/6164
@@ -812,7 +902,12 @@ impl EditorView {
         for (constructor, width) in view.gutters() {
             let gutter = constructor(editor, doc, view, theme, is_focused, *width);
             text.reserve(*width); // ensure there's enough space for the gutter
-            for (i, line) in (view.offset.row..(last_line + 1)).enumerate() {
+            for (i, mut line) in (view.offset.row..(last_line + 1)).enumerate() {
+                if let Some(ref line_numbers) = context_ln {
+                    if line_numbers.len() > i {
+                        line = line_numbers[i];
+                    }
+                }
                 let selected = cursors.contains(&line);
                 let x = viewport.x + offset;
                 let y = viewport.y + i as u16;

@@ -123,6 +123,9 @@ pub struct LanguageConfiguration {
     pub auto_pairs: Option<AutoPairs>,
 
     pub rulers: Option<Vec<u16>>, // if set, override editor's rulers
+
+    /// List of tree-sitter nodes that should be displayed in the sticky context.
+    pub sticky_context_nodes: Option<Vec<String>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
