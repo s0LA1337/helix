@@ -19,8 +19,7 @@ use helix_core::{
 use helix_view::{
     apply_transaction,
     document::{Mode, SCRATCH_BUFFER_NAME},
-    editor::{CompleteAction, CursorShapeConfig, LineNumber},
-    editor::{CompleteAction, CursorShapeConfig, RainbowIndentOptions},
+    editor::{CompleteAction, CursorShapeConfig, RainbowIndentOptions, LineNumber},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
