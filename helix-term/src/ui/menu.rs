@@ -292,13 +292,24 @@ impl<T: Item + 'static> Component for Menu<T> {
         Some(self.size)
     }
 
-    fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
+    fn render(&mut self, mut area: Rect, surface: &mut Surface, cx: &mut Context) {
         let theme = &cx.editor.theme;
         let style = theme
             .try_get("ui.menu")
             .unwrap_or_else(|| theme.get("ui.text"));
         let selected = theme.get("ui.menu.selected");
-        surface.clear_with(area, style);
+
+        let borders = cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::All
+            || cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::Menu;
+        if borders {
+            area.height += 2;
+            // If the menu is drawn above the current line, it would hide the line
+            if cx.editor.cursor().0.unwrap().row > area.y as usize && area.y >= 2 {
+                area.y -= 2;
+            }
+        }
+
+        area = surface.area.intersection(area);
 
         let scroll = self.scroll;
 
@@ -311,6 +322,14 @@ impl<T: Item + 'static> Component for Menu<T> {
             })
             .collect();
 
+        surface.clear_with(area, style);
+
+        if borders {
+            use tui::widgets::{Block, Borders, Widget};
+            Widget::render(Block::default().borders(Borders::ALL), area, surface);
+
+            area = area.clip_top(1).clip_bottom(1);
+        }
         let len = options.len();
 
         let win_height = area.height as usize;
@@ -342,15 +361,17 @@ impl<T: Item + 'static> Component for Menu<T> {
             },
         );
 
-        if let Some(cursor) = self.cursor {
-            let offset_from_top = cursor - scroll;
-            let left = &mut surface[(area.left(), area.y + offset_from_top as u16)];
-            left.set_style(selected);
-            let right = &mut surface[(
-                area.right().saturating_sub(1),
-                area.y + offset_from_top as u16,
-            )];
-            right.set_style(selected);
+        if !borders {
+            if let Some(cursor) = self.cursor {
+                let offset_from_top = cursor - scroll;
+                let left = &mut surface[(area.left(), area.y + offset_from_top as u16)];
+                left.set_style(selected);
+                let right = &mut surface[(
+                    area.right().saturating_sub(1),
+                    area.y + offset_from_top as u16,
+                )];
+                right.set_style(selected);
+            }
         }
 
         let fits = len <= win_height;
@@ -359,9 +380,8 @@ impl<T: Item + 'static> Component for Menu<T> {
         for (i, _) in (scroll..(scroll + win_height).min(len)).enumerate() {
             let cell = &mut surface[(area.x + area.width - 1, area.y + i as u16)];
 
-            if !fits {
+            if !(fits || borders) {
                 // Draw scroll track
-                cell.set_symbol("▐"); // right half block
                 cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
             }
 
@@ -369,6 +389,11 @@ impl<T: Item + 'static> Component for Menu<T> {
 
             if !fits && is_marked {
                 // Draw scroll thumb
+                if borders {
+                    cell.set_symbol("▌"); // left half block
+                } else {
+                    cell.set_symbol("▐"); // right half block
+                }
                 cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
             }
         }

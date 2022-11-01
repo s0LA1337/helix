@@ -434,6 +434,12 @@ impl Component for Completion {
             // clear area
             let background = cx.editor.theme.get("ui.popup");
             surface.clear_with(area, background);
+            if cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::All
+                || cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::Popup
+            {
+                use tui::widgets::{Block, Borders, Widget};
+                Widget::render(Block::default().borders(Borders::ALL), area, surface);
+            }
             markdown_doc.render(area, surface, cx);
         }
     }

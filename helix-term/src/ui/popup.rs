@@ -220,14 +220,22 @@ impl<T: Component> Component for Popup<T> {
         let (rel_x, rel_y) = self.get_rel_position(viewport, cx);
 
         // clip to viewport
-        let area = viewport.intersection(Rect::new(rel_x, rel_y, self.size.0, self.size.1));
+        let mut area = viewport.intersection(Rect::new(rel_x, rel_y, self.size.0, self.size.1));
 
         // clear area
         let background = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, background);
 
-        let inner = area.inner(&self.margin);
-        self.contents.render(inner, surface, cx);
+        if cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::All
+            || cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::Popup
+        {
+            use tui::widgets::{Block, Borders, Widget};
+            Widget::render(Block::default().borders(Borders::ALL), area, surface);
+        } else {
+            area = area.inner(&self.margin);
+        }
+
+        self.contents.render(area, surface, cx);
     }
 
     fn id(&self) -> Option<&'static str> {

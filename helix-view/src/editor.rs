@@ -174,6 +174,8 @@ pub struct Config {
     pub indent_guides: IndentGuidesConfig,
     /// Whether to color modes with different colors. Defaults to `false`.
     pub color_modes: bool,
+    /// Draw border around popups.
+    pub popup_border: PopupBorderConfig,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -575,6 +577,15 @@ impl Default for IndentGuidesConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PopupBorderConfig {
+    None,
+    All,
+    Popup,
+    Menu,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -610,6 +621,7 @@ impl Default for Config {
             bufferline: BufferLine::default(),
             indent_guides: IndentGuidesConfig::default(),
             color_modes: false,
+            popup_border: PopupBorderConfig::None,
         }
     }
 }
