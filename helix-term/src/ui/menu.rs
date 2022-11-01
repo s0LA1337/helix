@@ -382,31 +382,55 @@ impl<T: Item + 'static> Component for Menu<T> {
             for i in 0..win_height {
                 cell = &mut surface[(area.right() - 1, area.top() + i as u16)];
 
-            if !(fits || borders) {
-                // Draw scroll track
-                cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
-            }
-
-            let is_marked = i >= scroll_line && i < scroll_line + scroll_height;
-
-            if !fits && is_marked {
-                // Draw scroll thumb
-                if borders {
-                    cell.set_symbol("▌"); // left half block
-                } else {
-                    cell.set_symbol("▐"); // right half block
-                }
-                cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
-                cell.set_symbol("▐"); // right half block
-
-                if scroll_line <= i && i < scroll_line + scroll_height {
-                    // Draw scroll thumb
-                    cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
-                } else {
+                if !(fits || borders) {
                     // Draw scroll track
                     cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
                 }
+
+                let is_marked = i >= scroll_line && i < scroll_line + scroll_height;
+
+                if !fits && is_marked {
+                    // Draw scroll thumb
+                    if borders {
+                        cell.set_symbol("▌"); // left half block
+                    } else {
+                        cell.set_symbol("▐"); // right half block
+                    }
+                    cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                    cell.set_symbol("▐"); // right half block
+
+                    if scroll_line <= i && i < scroll_line + scroll_height {
+                        // Draw scroll thumb
+                        cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                    } else {
+                        // Draw scroll track
+                        cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
+                    }
+                }
             }
         }
+    }
+
+    fn should_update(&self) -> bool {
+        true
+    }
+
+    fn cursor(
+        &self,
+        _area: Rect,
+        _ctx: &Editor,
+    ) -> (
+        Option<helix_core::Position>,
+        helix_view::graphics::CursorKind,
+    ) {
+        (None, helix_view::graphics::CursorKind::Hidden)
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+
+    fn id(&self) -> Option<&'static str> {
+        None
     }
 }

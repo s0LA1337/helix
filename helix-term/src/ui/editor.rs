@@ -1473,7 +1473,6 @@ impl Component for EditorView {
         }
 
         // if the terminal size suddenly changed, we need to trigger a resize
-        let mut editor_area = area.clip_bottom(1);
         if self.explorer.is_some() && (config.explorer.is_embed()) {
             editor_area = editor_area.clip_left(config.explorer.column_width as u16 + 2);
         }
