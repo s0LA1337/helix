@@ -437,10 +437,10 @@ impl LanguageConfiguration {
         // always highlight syntax errors
         // highlights_query += "\n(ERROR) @error";
 
-        let rainbows_query = read_query(&language, "rainbows.scm");
+        let rainbows_query = read_query(&self.language_id, "rainbows.scm");
 
-        let injections_query = read_query(&language, "injections.scm");
-        let locals_query = read_query(&language, "locals.scm");
+        let injections_query = read_query(&self.language_id, "injections.scm");
+        let locals_query = read_query(&self.language_id, "locals.scm");
 
         if highlights_query.is_empty() {
             None
