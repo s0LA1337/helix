@@ -77,11 +77,12 @@ impl<T: Item> Menu<T> {
         editor_data: <T as Item>::Data,
         callback_fn: impl Fn(&mut Editor, Option<&T>, MenuEvent) + 'static,
     ) -> Self {
-        let mut menu = Self {
+        let matches = (0..options.len()).map(|i| (i, 0)).collect();
+        Self {
             options,
             editor_data,
             matcher: Box::new(Matcher::default()),
-            matches: Vec::new(),
+            matches,
             cursor: None,
             widths: Vec::new(),
             callback_fn: Box::new(callback_fn),
@@ -89,12 +90,7 @@ impl<T: Item> Menu<T> {
             size: (0, 0),
             viewport: (0, 0),
             recalculate: true,
-        };
-
-        // TODO: scoring on empty input should just use a fastpath
-        menu.score("");
-
-        menu
+        }
     }
 
     pub fn score(&mut self, pattern: &str) {
@@ -105,17 +101,15 @@ impl<T: Item> Menu<T> {
                 .iter()
                 .enumerate()
                 .filter_map(|(index, option)| {
-                    let text: String = option.filter_text(&self.editor_data).into();
+                    let text = option.filter_text(&self.editor_data);
                     // TODO: using fuzzy_indices could give us the char idx for match highlighting
                     self.matcher
                         .fuzzy_match(&text, pattern)
                         .map(|score| (index, score))
                 }),
         );
-        // matches.sort_unstable_by_key(|(_, score)| -score);
-        self.matches.sort_unstable_by_key(|(index, _score)| {
-            self.options[*index].sort_text(&self.editor_data)
-        });
+        // Order of equal elements needs to be preserved as LSP preselected items come in order of high to low priority
+        self.matches.sort_by_key(|(_, score)| -score);
 
         // reset cursor position
         self.cursor = None;
@@ -213,6 +207,14 @@ impl<T: Item> Menu<T> {
         })
     }
 
+    pub fn selection_mut(&mut self) -> Option<&mut T> {
+        self.cursor.and_then(|cursor| {
+            self.matches
+                .get(cursor)
+                .map(|(index, _score)| &mut self.options[*index])
+        })
+    }
+
     pub fn is_empty(&self) -> bool {
         self.matches.is_empty()
     }
@@ -291,13 +293,24 @@ impl<T: Item + 'static> Component for Menu<T> {
         Some(self.size)
     }
 
-    fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
+    fn render(&mut self, mut area: Rect, surface: &mut Surface, cx: &mut Context) {
         let theme = &cx.editor.theme;
         let style = theme
             .try_get("ui.menu")
             .unwrap_or_else(|| theme.get("ui.text"));
         let selected = theme.get("ui.menu.selected");
-        surface.clear_with(area, style);
+
+        let borders = cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::All
+            || cx.editor.config().popup_border == helix_view::editor::PopupBorderConfig::Menu;
+        if borders {
+            area.height += 2;
+            // If the menu is drawn above the current line, it would hide the line
+            if cx.editor.cursor().0.unwrap().row > area.y as usize && area.y >= 2 {
+                area.y -= 2;
+            }
+        }
+
+        area = surface.area.intersection(area);
 
         let scroll = self.scroll;
 
@@ -310,6 +323,14 @@ impl<T: Item + 'static> Component for Menu<T> {
             })
             .collect();
 
+        surface.clear_with(area, style);
+
+        if borders {
+            use tui::widgets::{Block, Borders, Widget};
+            Widget::render(Block::default().borders(Borders::ALL), area, surface);
+
+            area = area.clip_top(1).clip_bottom(1);
+        }
         let len = options.len();
 
         let win_height = area.height as usize;
@@ -317,11 +338,6 @@ impl<T: Item + 'static> Component for Menu<T> {
         const fn div_ceil(a: usize, b: usize) -> usize {
             (a + b - 1) / b
         }
-
-        let scroll_height = std::cmp::min(div_ceil(win_height.pow(2), len), win_height as usize);
-
-        let scroll_line = (win_height - scroll_height) * scroll
-            / std::cmp::max(1, len.saturating_sub(win_height));
 
         let rows = options.iter().map(|option| option.row(&self.editor_data));
         let table = Table::new(rows)
@@ -341,35 +357,80 @@ impl<T: Item + 'static> Component for Menu<T> {
             },
         );
 
-        if let Some(cursor) = self.cursor {
-            let offset_from_top = cursor - scroll;
-            let left = &mut surface[(area.left(), area.y + offset_from_top as u16)];
-            left.set_style(selected);
-            let right = &mut surface[(
-                area.right().saturating_sub(1),
-                area.y + offset_from_top as u16,
-            )];
-            right.set_style(selected);
+        if !borders {
+            if let Some(cursor) = self.cursor {
+                let offset_from_top = cursor - scroll;
+                let left = &mut surface[(area.left(), area.y + offset_from_top as u16)];
+                left.set_style(selected);
+                let right = &mut surface[(
+                    area.right().saturating_sub(1),
+                    area.y + offset_from_top as u16,
+                )];
+                right.set_style(selected);
+            }
         }
 
         let fits = len <= win_height;
 
         let scroll_style = theme.get("ui.menu.scroll");
-        for (i, _) in (scroll..(scroll + win_height).min(len)).enumerate() {
-            let cell = &mut surface[(area.x + area.width - 1, area.y + i as u16)];
+        if !fits {
+            let scroll_height = div_ceil(win_height.pow(2), len).min(win_height);
+            let scroll_line = (win_height - scroll_height) * scroll
+                / std::cmp::max(1, len.saturating_sub(win_height));
 
-            if !fits {
-                // Draw scroll track
-                cell.set_symbol("▐"); // right half block
-                cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
-            }
+            let mut cell;
+            for i in 0..win_height {
+                cell = &mut surface[(area.right() - 1, area.top() + i as u16)];
 
-            let is_marked = i >= scroll_line && i < scroll_line + scroll_height;
+                if !(fits || borders) {
+                    // Draw scroll track
+                    cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
+                }
 
-            if !fits && is_marked {
-                // Draw scroll thumb
-                cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                let is_marked = i >= scroll_line && i < scroll_line + scroll_height;
+
+                if !fits && is_marked {
+                    // Draw scroll thumb
+                    if borders {
+                        cell.set_symbol("▌"); // left half block
+                    } else {
+                        cell.set_symbol("▐"); // right half block
+                    }
+                    cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                    cell.set_symbol("▐"); // right half block
+
+                    if scroll_line <= i && i < scroll_line + scroll_height {
+                        // Draw scroll thumb
+                        cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                    } else {
+                        // Draw scroll track
+                        cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
+                    }
+                }
             }
         }
+    }
+
+    fn should_update(&self) -> bool {
+        true
+    }
+
+    fn cursor(
+        &self,
+        _area: Rect,
+        _ctx: &Editor,
+    ) -> (
+        Option<helix_core::Position>,
+        helix_view::graphics::CursorKind,
+    ) {
+        (None, helix_view::graphics::CursorKind::Hidden)
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+
+    fn id(&self) -> Option<&'static str> {
+        None
     }
 }

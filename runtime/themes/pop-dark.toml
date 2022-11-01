@@ -43,7 +43,6 @@ module = { bg = 'orangeL' }
 special = { fg = 'orangeW' }
 operator = { fg = 'orangeY' }
 attribute = { fg = 'orangeL' }
-attribute = { fg = 'orangeL' }
 namespace = { fg = 'orangeL' }
 'type' = { fg = 'redH' }
 'type.builtin' = { fg = 'orangeL' }
@@ -120,6 +119,12 @@ namespace = { fg = 'orangeL' }
 'diff.minus' = { fg = '#dd4d4d' }
 'diff.delta' = { fg = '#4d4ddd' }
 'diff.delta.moved' = { fg = '#dd4ddd' }
+
+"ui.explorer.file" = { fg = "greyT" }
+"ui.explorer.dir" = { fg = "blueL" }
+"ui.explorer.exe" = { fg = "greyT" }
+"ui.explorer.focus" = { modifiers = ["reversed"] }
+"ui.explorer.unfocus" = { bg = "greyL" }
 
 [palette]
 white = '#FFFFFF'

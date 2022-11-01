@@ -39,7 +39,10 @@
 "diff.delta" = "gold"
 "diff.minus" = "red"
 
-diagnostic = { modifiers = ["underlined"] }
+"diagnostic.info".underline = { color = "blue", style = "curl" } 
+"diagnostic.hint".underline = { color = "green", style = "curl" } 
+"diagnostic.warning".underline = { color = "yellow", style = "curl" } 
+"diagnostic.error".underline = { color = "red", style = "curl" } 
 "info" = { fg = "blue", modifiers = ["bold"] }
 "hint" = { fg = "green", modifiers = ["bold"] }
 "warning" = { fg = "yellow", modifiers = ["bold"] }
@@ -77,6 +80,12 @@ diagnostic = { modifiers = ["underlined"] }
 "ui.menu" = { fg = "white", bg = "gray" }
 "ui.menu.selected" = { fg = "black", bg = "blue" }
 "ui.menu.scroll" = { fg = "white", bg = "light-gray" }
+
+"ui.explorer.file" = { fg = "white" }
+"ui.explorer.dir" = { fg = "blue" }
+"ui.explorer.exe" = { fg = "white" }
+"ui.explorer.focus" = { modifiers = ["reversed"] }
+"ui.explorer.unfocus" = { bg = "light-gray" }
 
 [palette]
 

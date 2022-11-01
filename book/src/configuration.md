@@ -49,6 +49,7 @@ on unix operating systems.
 | `gutters` | Gutters to display: Available are `diagnostics` and `line-numbers` and `spacer`, note that `diagnostics` also includes other features like breakpoints, 1-width padding will be inserted if gutters is non-empty | `["diagnostics", "line-numbers"]` |
 | `auto-completion` | Enable automatic pop up of auto-completion. | `true` |
 | `auto-format` | Enable automatic formatting on save. | `true` |
+| `auto-save` | Enable automatic saving on focus moving away from Helix. Requires [focus event support](https://github.com/helix-editor/helix/wiki/Terminal-Support) from your terminal. | `false` |
 | `idle-timeout` | Time in milliseconds since last keypress before idle timers trigger. Used for autocompletion, set to 0 for instant. | `400` |
 | `completion-trigger-len` | The min-length of word under cursor to trigger autocompletion | `2` |
 | `auto-info` | Whether to display infoboxes | `true` |
@@ -57,6 +58,7 @@ on unix operating systems.
 | `bufferline` | Renders a line at the top of the editor displaying open buffers. Can be `always`, `never` or `multiple` (only shown if more than one buffer is in use) | `never` |
 | `color-modes` | Whether to color the mode indicator with different colors depending on the mode itself | `false` |
 | `rainbow-brackets` | Whether to render rainbow colors for matching brackets. Requires tree-sitter `rainbows.scm` queries for the language. | `false` |
+| `popup-border` | Draw border around `popup`, `menu`, `all`, or `none` | `none` |
 
 ### `[editor.statusline]` Section
 
@@ -169,6 +171,8 @@ auto-pairs = false # defaults to `true`
 The default pairs are <code>(){}[]''""``</code>, but these can be customized by
 setting `auto-pairs` to a TOML table:
 
+Example
+
 ```toml
 [editor.auto-pairs]
 '(' = ')'
@@ -253,3 +257,12 @@ render = true
 character = "╎" # Some characters that work well: "▏", "┆", "┊", "⸽"
 skip-levels = 1
 ```
+
+### `[editor.explorer]` Section
+Sets explorer side width and style.
+
+ | Key            | Description                                                                              | Default |
+ | ---            | -----------                                                                              | ------- |
+ | `column-width` | explorer side width                                                                      | 30      |
+ | `style`        | explorer item style, tree or list                                                        | tree    |
+ | `position`     | explorer widget position, embed or overlay                                               | overlay |

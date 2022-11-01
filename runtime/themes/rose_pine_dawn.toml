@@ -63,6 +63,12 @@
 "markup.quote" = { fg = "rose" }
 "markup.raw" = { fg = "foam" }
 
+"ui.explorer.file" = { fg = "text" }
+"ui.explorer.dir" = { fg = "rose" }
+"ui.explorer.exe" = { fg = "text" }
+"ui.explorer.focus" = { modifiers = ["reversed"] }
+"ui.explorer.unfocus" = { bg = "highlight" }
+
 [palette]
 base     = "#faf4ed" 
 surface  = "#fffaf3" 
@@ -76,6 +82,6 @@ rose     = "#d7827e"
 pine     = "#286983"
 foam     = "#56949f"
 iris     = "#907aa9"
-highlight = "#eee9e6"
-highlightInactive = "#f2ede9"
-highlightOverlay = "#e4dfde"
+highlight = "#dfdad9"
+highlightInactive = "#f4ede8"
+highlightOverlay = "#cecacd"

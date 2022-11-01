@@ -18,6 +18,9 @@
 
 # status bars, panels, modals, autocompletion
 "ui.statusline" = { fg = "base8", bg = "base4" }
+"ui.statusline.normal" = { fg = "base4", bg = "blue" }
+"ui.statusline.insert" = { fg = "base4", bg = "green" }
+"ui.statusline.select" = { fg = "base4", bg = "purple" }
 "ui.popup" = { bg = "base3" }
 "ui.window" = { bg = "base3" }
 "ui.help" = { fg = "base8", bg = "base3" }
@@ -96,6 +99,12 @@ diagnostic = { modifiers = ["underlined"] }
 "markup.link.url" = { fg = "orange", modifiers = ["underlined"] }
 "markup.link.text" = "yellow"
 "markup.quote" = "green"
+
+"ui.explorer.file" = { fg = "base8" }
+"ui.explorer.dir" = { fg = "blue" }
+"ui.explorer.exe" = { fg = "base8" }
+"ui.explorer.focus" = { modifiers = ["reversed"] }
+"ui.explorer.unfocus" = { bg = "base4" }
 
 [palette]
 # primary colors
