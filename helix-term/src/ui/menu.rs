@@ -108,7 +108,8 @@ impl<T: Item> Menu<T> {
                         .map(|score| (index, score))
                 }),
         );
-        self.matches.sort_unstable_by_key(|(_, score)| -score);
+        // Order of equal elements needs to be preserved as LSP preselected items come in order of high to low priority
+        self.matches.sort_by_key(|(_, score)| -score);
 
         // reset cursor position
         self.cursor = None;
@@ -338,11 +339,6 @@ impl<T: Item + 'static> Component for Menu<T> {
             (a + b - 1) / b
         }
 
-        let scroll_height = std::cmp::min(div_ceil(win_height.pow(2), len), win_height as usize);
-
-        let scroll_line = (win_height - scroll_height) * scroll
-            / std::cmp::max(1, len.saturating_sub(win_height));
-
         let rows = options.iter().map(|option| option.row(&self.editor_data));
         let table = Table::new(rows)
             .style(style)
@@ -377,8 +373,14 @@ impl<T: Item + 'static> Component for Menu<T> {
         let fits = len <= win_height;
 
         let scroll_style = theme.get("ui.menu.scroll");
-        for (i, _) in (scroll..(scroll + win_height).min(len)).enumerate() {
-            let cell = &mut surface[(area.x + area.width - 1, area.y + i as u16)];
+        if !fits {
+            let scroll_height = div_ceil(win_height.pow(2), len).min(win_height);
+            let scroll_line = (win_height - scroll_height) * scroll
+                / std::cmp::max(1, len.saturating_sub(win_height));
+
+            let mut cell;
+            for i in 0..win_height {
+                cell = &mut surface[(area.right() - 1, area.top() + i as u16)];
 
             if !(fits || borders) {
                 // Draw scroll track
@@ -395,6 +397,15 @@ impl<T: Item + 'static> Component for Menu<T> {
                     cell.set_symbol("▐"); // right half block
                 }
                 cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                cell.set_symbol("▐"); // right half block
+
+                if scroll_line <= i && i < scroll_line + scroll_height {
+                    // Draw scroll thumb
+                    cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
+                } else {
+                    // Draw scroll track
+                    cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
+                }
             }
         }
     }
