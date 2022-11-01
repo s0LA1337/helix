@@ -1650,12 +1650,17 @@ impl Component for EditorView {
         if self.explorer.is_some() && (config.explorer.is_embed()) {
             editor_area = editor_area.clip_left(config.explorer.column_width as u16 + 2);
         }
+
         cx.editor.resize(editor_area); // -1 from bottom for commandline
 
         if let Some(explore) = self.explorer.as_mut() {
             if !explore.content.is_focus() && config.explorer.is_embed() {
                 explore.content.render(area, surface, cx);
             }
+        }
+
+        if use_bufferline {
+            Self::render_bufferline(cx.editor, area.with_height(1), surface);
         }
 
         for (view, is_focused) in cx.editor.tree.views() {
