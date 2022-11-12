@@ -258,9 +258,9 @@ pub struct TerminalConfig {
 
 #[cfg(windows)]
 pub fn get_terminal_provider() -> Option<TerminalConfig> {
-    use crate::clipboard::provider::command::exists;
+    use crate::env::binary_exists;
 
-    if exists("wt") {
+    if binary_exists("wt") {
         return Some(TerminalConfig {
             command: "wt".to_string(),
             args: vec![
@@ -281,16 +281,16 @@ pub fn get_terminal_provider() -> Option<TerminalConfig> {
 
 #[cfg(not(any(windows, target_os = "wasm32")))]
 pub fn get_terminal_provider() -> Option<TerminalConfig> {
-    use crate::clipboard::provider::command::{env_var_is_set, exists};
+    use crate::env::{binary_exists, env_var_is_set};
 
-    if env_var_is_set("TMUX") && exists("tmux") {
+    if env_var_is_set("TMUX") && binary_exists("tmux") {
         return Some(TerminalConfig {
             command: "tmux".to_string(),
             args: vec!["split-window".to_string()],
         });
     }
 
-    if env_var_is_set("WEZTERM_UNIX_SOCKET") && exists("wezterm") {
+    if env_var_is_set("WEZTERM_UNIX_SOCKET") && binary_exists("wezterm") {
         return Some(TerminalConfig {
             command: "wezterm".to_string(),
             args: vec!["cli".to_string(), "split-pane".to_string()],
@@ -417,7 +417,7 @@ pub enum StatusLineElement {
 
 // Cursor shape is read and used on every rendered frame and so needs
 // to be fast. Therefore we avoid a hashmap and use an enum indexed array.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CursorShapeConfig([CursorKind; 3]);
 
 impl CursorShapeConfig {
@@ -527,6 +527,7 @@ impl std::str::FromStr for GutterType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "diagnostics" => Ok(Self::Diagnostics),
+            "spacer" => Ok(Self::Spacer),
             "line-numbers" => Ok(Self::LineNumbers),
             _ => anyhow::bail!("Gutter type can only be `diagnostics` or `line-numbers`."),
         }
@@ -679,7 +680,11 @@ impl Default for Config {
             line_number: LineNumber::Absolute,
             cursorline: false,
             cursorcolumn: false,
-            gutters: vec![GutterType::Diagnostics, GutterType::LineNumbers],
+            gutters: vec![
+                GutterType::Diagnostics,
+                GutterType::Spacer,
+                GutterType::LineNumbers,
+            ],
             middle_click_paste: true,
             auto_pairs: AutoPairConfig::default(),
             auto_completion: true,
@@ -1316,9 +1321,11 @@ impl Editor {
     pub fn focus(&mut self, view_id: ViewId) {
         let prev_id = std::mem::replace(&mut self.tree.focus, view_id);
 
-        // if leaving the view: mode should reset
+        // if leaving the view: mode should reset and the cursor should be
+        // within view
         if prev_id != view_id {
             self.mode = Mode::Normal;
+            self.ensure_cursor_in_view(view_id);
         }
     }
 
@@ -1327,9 +1334,11 @@ impl Editor {
         self.tree.focus_next();
         let id = self.tree.focus;
 
-        // if leaving the view: mode should reset
+        // if leaving the view: mode should reset and the cursor should be
+        // within view
         if prev_id != id {
             self.mode = Mode::Normal;
+            self.ensure_cursor_in_view(id);
         }
     }
 
@@ -1397,7 +1406,7 @@ impl Editor {
             .primary()
             .cursor(doc.text().slice(..));
         if let Some(mut pos) = view.screen_coords_at_pos(doc, doc.text().slice(..), cursor) {
-            let inner = view.inner_area();
+            let inner = view.inner_area(doc);
             pos.col += inner.x as usize;
             pos.row += inner.y as usize;
             let cursorkind = config.cursor_shape.from_mode(self.mode);
