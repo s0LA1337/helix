@@ -534,7 +534,7 @@ impl EditorView {
 
         // TODO: this probably needs it's own style, although it seems to work well even with cursorline
         let context_style = theme.get("ui.cursorline.primary");
-        let mut context_area = view.inner_area();
+        let mut context_area = view.inner_area(doc);
         context_area.height = 1;
 
         let mut line_numbers = Vec::new();
@@ -884,7 +884,7 @@ impl EditorView {
         surface: &mut Surface,
         theme: &Theme,
         is_focused: bool,
-        context_ln: Option<Vec<usize>>,
+        _context_ln: Option<Vec<usize>>,
     ) {
         let text = doc.text().slice(..);
         let last_line = view.last_line(doc);
