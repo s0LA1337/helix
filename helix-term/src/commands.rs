@@ -54,7 +54,7 @@ use crate::{
 
 use crate::job::{self, Jobs};
 use futures_util::StreamExt;
-use std::{collections::HashMap, fmt, fmt::Write, future::Future};
+use std::{collections::HashMap, fmt, future::Future};
 use std::{collections::HashSet, num::NonZeroUsize};
 
 use std::{
@@ -783,11 +783,7 @@ fn trim_selections(cx: &mut Context) {
             let mut end = range.to();
             start = movement::skip_while(text, start, |x| x.is_whitespace()).unwrap_or(start);
             end = movement::backwards_skip_while(text, end, |x| x.is_whitespace()).unwrap_or(end);
-            if range.anchor < range.head {
-                Some(Range::new(start, end))
-            } else {
-                Some(Range::new(end, start))
-            }
+            Some(Range::new(start, end).with_direction(range.direction()))
         })
         .collect();
 
@@ -1659,11 +1655,7 @@ fn search_impl(
 
         // Determine range direction based on the primary range
         let primary = selection.primary();
-        let range = if primary.head < primary.anchor {
-            Range::new(end, start)
-        } else {
-            Range::new(start, end)
-        };
+        let range = Range::new(start, end).with_direction(primary.direction());
 
         let selection = match movement {
             Movement::Extend => selection.clone().push(range),
@@ -2096,11 +2088,7 @@ fn extend_to_line_bounds(cx: &mut Context) {
             let start = text.line_to_char(start_line);
             let end = text.line_to_char((end_line + 1).min(text.len_lines()));
 
-            if range.anchor <= range.head {
-                Range::new(start, end)
-            } else {
-                Range::new(end, start)
-            }
+            Range::new(start, end).with_direction(range.direction())
         }),
     );
 }
@@ -2137,11 +2125,7 @@ fn shrink_to_line_bounds(cx: &mut Context) {
                 end = text.line_to_char(end_line);
             }
 
-            if range.anchor <= range.head {
-                Range::new(start, end)
-            } else {
-                Range::new(end, start)
-            }
+            Range::new(start, end).with_direction(range.direction())
         }),
     );
 }
@@ -2503,13 +2487,11 @@ impl ui::menu::Item for MappableCommand {
         let fmt_binding = |bindings: &Vec<Vec<KeyEvent>>| -> String {
             bindings.iter().fold(String::new(), |mut acc, bind| {
                 if !acc.is_empty() {
-                    acc.push_str(", ");
+                    acc.push(' ');
                 }
-                bind.iter().fold(false, |needs_plus, key| {
-                    write!(&mut acc, "{}{}", if needs_plus { "+" } else { "" }, key)
-                        .expect("Writing to a string can only fail on an Out-Of-Memory error");
-                    true
-                });
+                for key in bind {
+                    acc.push_str(&key.key_sequence_format());
+                }
                 acc
             })
         };
@@ -2793,15 +2775,15 @@ fn goto_line(cx: &mut Context) {
 fn goto_line_impl(editor: &mut Editor, count: Option<NonZeroUsize>) {
     if let Some(count) = count {
         let (view, doc) = current!(editor);
-        let max_line = if doc.text().line(doc.text().len_lines() - 1).len_chars() == 0 {
+        let text = doc.text().slice(..);
+        let max_line = if text.line(text.len_lines() - 1).len_chars() == 0 {
             // If the last line is blank, don't jump to it.
-            doc.text().len_lines().saturating_sub(2)
+            text.len_lines().saturating_sub(2)
         } else {
-            doc.text().len_lines() - 1
+            text.len_lines() - 1
         };
         let line_idx = std::cmp::min(count.get() - 1, max_line);
-        let text = doc.text().slice(..);
-        let pos = doc.text().line_to_char(line_idx);
+        let pos = text.line_to_char(line_idx);
         let selection = doc
             .selection(view.id)
             .clone()
@@ -2814,14 +2796,14 @@ fn goto_line_impl(editor: &mut Editor, count: Option<NonZeroUsize>) {
 
 fn goto_last_line(cx: &mut Context) {
     let (view, doc) = current!(cx.editor);
-    let line_idx = if doc.text().line(doc.text().len_lines() - 1).len_chars() == 0 {
-        // If the last line is blank, don't jump to it.
-        doc.text().len_lines().saturating_sub(2)
-    } else {
-        doc.text().len_lines() - 1
-    };
     let text = doc.text().slice(..);
-    let pos = doc.text().line_to_char(line_idx);
+    let line_idx = if text.line(text.len_lines() - 1).len_chars() == 0 {
+        // If the last line is blank, don't jump to it.
+        text.len_lines().saturating_sub(2)
+    } else {
+        text.len_lines() - 1
+    };
+    let pos = text.line_to_char(line_idx);
     let selection = doc
         .selection(view.id)
         .clone()
@@ -3863,7 +3845,7 @@ fn format_selections(cx: &mut Context) {
     apply_transaction(&transaction, doc, view);
 }
 
-fn join_selections_inner(cx: &mut Context, select_space: bool) {
+fn join_selections_impl(cx: &mut Context, select_space: bool) {
     use movement::skip_while;
     let (view, doc) = current!(cx.editor);
     let text = doc.text();
@@ -3942,11 +3924,11 @@ fn keep_or_remove_selections_impl(cx: &mut Context, remove: bool) {
 }
 
 fn join_selections(cx: &mut Context) {
-    join_selections_inner(cx, false)
+    join_selections_impl(cx, false)
 }
 
 fn join_selections_space(cx: &mut Context) {
-    join_selections_inner(cx, true)
+    join_selections_impl(cx, true)
 }
 
 fn keep_selections(cx: &mut Context) {
@@ -4008,7 +3990,6 @@ pub fn completion(cx: &mut Context) {
     iter.reverse();
     let offset = iter.take_while(|ch| chars::char_is_word(*ch)).count();
     let start_offset = cursor.saturating_sub(offset);
-    let prefix = text.slice(start_offset..cursor).to_string();
 
     cx.callback(
         future,
@@ -4018,7 +3999,7 @@ pub fn completion(cx: &mut Context) {
                 return;
             }
 
-            let mut items = match response {
+            let items = match response {
                 Some(lsp::CompletionResponse::Array(items)) => items,
                 // TODO: do something with is_incomplete
                 Some(lsp::CompletionResponse::List(lsp::CompletionList {
@@ -4027,15 +4008,6 @@ pub fn completion(cx: &mut Context) {
                 })) => items,
                 None => Vec::new(),
             };
-
-            if !prefix.is_empty() {
-                items.retain(|item| {
-                    item.filter_text
-                        .as_ref()
-                        .unwrap_or(&item.label)
-                        .starts_with(&prefix)
-                });
-            }
 
             if items.is_empty() {
                 // editor.set_error("No completion available");
@@ -5042,16 +5014,20 @@ fn increment_impl(cx: &mut Context, increment_direction: IncrementDirection) {
             overlapping_indexes.insert(i + 1);
         }
     }
-    let changes = changes.into_iter().enumerate().filter_map(|(i, change)| {
-        if overlapping_indexes.contains(&i) {
-            None
-        } else {
-            Some(change)
-        }
-    });
+    let changes: Vec<_> = changes
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, change)| {
+            if overlapping_indexes.contains(&i) {
+                None
+            } else {
+                Some(change)
+            }
+        })
+        .collect();
 
-    if changes.clone().count() > 0 {
-        let transaction = Transaction::change(doc.text(), changes);
+    if !changes.is_empty() {
+        let transaction = Transaction::change(doc.text(), changes.into_iter());
         let transaction = transaction.with_selection(selection.clone());
 
         apply_transaction(&transaction, doc, view);
