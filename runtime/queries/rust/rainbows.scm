@@ -19,7 +19,6 @@
   (tuple_struct_pattern)
   (unit_type)
   (unit_expression)
-  (meta_arguments)
   (visibility_modifier)
   (parenthesized_expression)
   (token_repetition_pattern)
