@@ -1028,10 +1028,12 @@ fn reload(
     }
 
     let scrolloff = cx.editor.config().scrolloff;
+    let redraw_handle = cx.editor.redraw_handle.clone();
     let (view, doc) = current!(cx.editor);
-    doc.reload(view).map(|_| {
-        view.ensure_cursor_in_view(doc, scrolloff);
-    })
+    doc.reload(view, &cx.editor.diff_providers, redraw_handle)
+        .map(|_| {
+            view.ensure_cursor_in_view(doc, scrolloff);
+        })
 }
 
 /// Update the [`Document`] if it has been modified.
