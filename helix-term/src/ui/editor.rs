@@ -126,6 +126,16 @@ impl EditorView {
         }
 
         let mut highlights = Self::doc_syntax_highlights(doc, view.offset, inner.height, theme);
+        if doc
+            .language_config()
+            .and_then(|lang_config| lang_config.rainbow_brackets)
+            .unwrap_or(config.rainbow_brackets)
+        {
+            highlights = Box::new(syntax::merge(
+                highlights,
+                Self::doc_rainbow_highlights(doc, view.offset, inner.height, theme),
+            ));
+        }
         for diagnostic in Self::doc_diagnostics_highlights(doc, theme) {
             // Most of the `diagnostic` Vecs are empty most of the time. Skipping
             // a merge for any empty Vec saves a significant amount of work.
@@ -263,6 +273,49 @@ impl EditorView {
                 .into_iter(),
             ),
         }
+    }
+
+    pub fn doc_rainbow_highlights(
+        doc: &Document,
+        offset: Position,
+        height: u16,
+        theme: &Theme,
+    ) -> Vec<(usize, std::ops::Range<usize>)> {
+        let syntax = match doc.syntax() {
+            Some(syntax) => syntax,
+            None => return Vec::new(),
+        };
+
+        let text = doc.text().slice(..);
+
+        // calculate viewport byte ranges
+        let last_line = doc.text().len_lines().saturating_sub(1);
+        let last_visible_line = (offset.row + height as usize)
+            .saturating_sub(1)
+            .min(last_line);
+        let visible_start = text.line_to_byte(offset.row.min(last_line));
+        let visible_end = text.line_to_byte(last_visible_line + 1);
+
+        // The calculation for the current nesting level for rainbow highlights
+        // depends on where we start the iterator from. For accuracy, we start
+        // the iterator further back than the viewport: at the start of the containing
+        // non-root syntax-tree node. Any spans that are off-screen are truncated when
+        // the spans are merged via [syntax::merge].
+        let syntax_node_start =
+            syntax::child_for_byte_range(syntax.tree().root_node(), visible_start..visible_start)
+                .map_or(visible_start, |node| node.byte_range().start);
+        let syntax_node_range = syntax_node_start..visible_end;
+
+        let mut spans = syntax.rainbow_spans(text, Some(syntax_node_range), theme.rainbow_length());
+
+        for (_highlight, range) in spans.iter_mut() {
+            let start = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, range.start));
+            let end = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, range.end));
+
+            *range = start..end;
+        }
+
+        spans
     }
 
     /// Get highlight spans for document diagnostics
