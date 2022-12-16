@@ -1432,7 +1432,7 @@ impl Syntax {
                 // Reuse a cursor from the pool if available.
                 let mut cursor = PARSER.with(|ts_parser| {
                     let highlighter = &mut ts_parser.borrow_mut();
-                    highlighter.cursors.pop().unwrap_or_else(QueryCursor::new)
+                    highlighter.cursors.pop().unwrap_or_default()
                 });
 
                 // The `captures` iterator borrows the `Tree` and the `QueryCursor`, which
@@ -1570,6 +1570,94 @@ impl Syntax {
         // data structure to find the smallest range that contains a point
         // when some of the ranges in the structure can overlap.
         TreeCursor::new(&self.layers, self.root)
+    }
+
+    /// Queries for rainbow highlights in the given range.
+    pub fn rainbow_spans<'a>(
+        &'a self,
+        source: RopeSlice<'a>,
+        query_range: Option<std::ops::Range<usize>>,
+        rainbow_length: usize,
+    ) -> Vec<(usize, std::ops::Range<usize>)> {
+        struct RainbowScope {
+            end: usize,
+            node_id: Option<usize>,
+            highlight: usize,
+        }
+
+        let mut spans = Vec::new();
+        let mut scope_stack: Vec<RainbowScope> = Vec::new();
+
+        // Calculating rainbow highlights is similar to determining local highlights
+        // in the highlight iterator. We iterate over the query captures for
+        // `@rainbow.scope` and `@rainbow.bracket`:
+        //
+        // * `@rainbow.scope`: pushes a new `RainbowScope` onto the `scope_stack`
+        //   stack. The number of `RainbowScope`s is the level of nesting within
+        //   brackets and determines which color of the rainbow should be used as
+        //   a highlight: `scope_stack.len() % rainbow_length`.
+        //
+        // * `@rainbow.bracket`: adds a new highlight span to the `spans` Vec.
+        //   A `@rainbow.bracket` capture only creates a new highlight if that node
+        //   is a child node of the latest node captured with `@rainbow.scope`,
+        //   or if the last `RainbowScope` on the `scope_stack` was captured with
+        //   the `(set! rainbow.include-children)` property.
+        //
+        // The iterator over the query captures returns captures across injection
+        // layers sorted by the earliest captures in the document first, so
+        // highlight colors are calculated correctly across injection layers.
+
+        // Iterate over all of the captures for rainbow queries across injections.
+        for (layer, match_, capture_index) in
+            self.query_iter(|config| &config.rainbow_query, source, query_range)
+        {
+            let capture = match_.captures[capture_index];
+            let range = capture.node.byte_range();
+
+            // If any scope in the stack ends before this new capture begins,
+            // pop the scope out of the scope stack.
+            while let Some(scope) = scope_stack.last() {
+                if range.start >= scope.end {
+                    scope_stack.pop();
+                } else {
+                    break;
+                }
+            }
+
+            if Some(capture.index) == layer.config.rainbow_scope_capture_index {
+                // If the capture is a "rainbow.scope", push it onto the scope stack.
+                let mut scope = RainbowScope {
+                    end: range.end,
+                    node_id: Some(capture.node.id()),
+                    highlight: scope_stack.len() % rainbow_length,
+                };
+                for prop in layer
+                    .config
+                    .rainbow_query
+                    .property_settings(match_.pattern_index)
+                {
+                    if prop.key.as_ref() == "rainbow.include-children" {
+                        scope.node_id = None;
+                    }
+                }
+                scope_stack.push(scope);
+            } else if Some(capture.index) == layer.config.rainbow_bracket_capture_index {
+                // If the capture is a "rainbow.bracket", check that the top of the scope stack
+                // is a valid scope for the bracket. The scope is valid if:
+                // * The scope's node is the direct parent of the captured node.
+                // * The scope has the "rainbow.include-children" property set. This allows the
+                //   scope to match all descendant nodes in its range.
+                if let Some(scope) = scope_stack.last() {
+                    if scope.node_id.is_none()
+                        || capture.node.parent().map(|p| p.id()) == scope.node_id
+                    {
+                        spans.push((scope.highlight, range));
+                    }
+                }
+            }
+        }
+
+        spans
     }
 
     // Commenting
@@ -1847,6 +1935,8 @@ pub struct HighlightConfiguration {
     local_def_capture_index: Option<u32>,
     local_def_value_capture_index: Option<u32>,
     local_ref_capture_index: Option<u32>,
+    rainbow_scope_capture_index: Option<u32>,
+    rainbow_bracket_capture_index: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -1983,6 +2073,8 @@ impl HighlightConfiguration {
         let mut local_def_value_capture_index = None;
         let mut local_ref_capture_index = None;
         let mut local_scope_capture_index = None;
+        let mut rainbow_scope_capture_index = None;
+        let mut rainbow_bracket_capture_index = None;
         for (i, name) in query.capture_names().iter().enumerate() {
             let i = Some(i as u32);
             match *name {
@@ -1990,6 +2082,15 @@ impl HighlightConfiguration {
                 "local.definition-value" => local_def_value_capture_index = i,
                 "local.reference" => local_ref_capture_index = i,
                 "local.scope" => local_scope_capture_index = i,
+                _ => {}
+            }
+        }
+
+        for (i, name) in rainbow_query.capture_names().iter().enumerate() {
+            let i = Some(i as u32);
+            match *name {
+                "rainbow.scope" => rainbow_scope_capture_index = i,
+                "rainbow.bracket" => rainbow_bracket_capture_index = i,
                 _ => {}
             }
         }
@@ -2023,6 +2124,8 @@ impl HighlightConfiguration {
             local_def_capture_index,
             local_def_value_capture_index,
             local_ref_capture_index,
+            rainbow_scope_capture_index,
+            rainbow_bracket_capture_index,
         })
     }
 
