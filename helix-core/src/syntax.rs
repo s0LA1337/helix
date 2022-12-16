@@ -1165,7 +1165,9 @@ impl Syntax {
             )
         });
 
-        let mut result = HighlightIter {
+        sort_layers(&mut layers);
+
+        HighlightIter {
             source,
             byte_offset: range.map_or(0, |r| r.start),
             cancellation_flag,
@@ -1173,9 +1175,7 @@ impl Syntax {
             layers,
             next_event: None,
             last_highlight_range: None,
-        };
-        result.sort_layers();
-        result
+        }
     }
 
     /// Queries for rainbow highlights in the given range.
@@ -1763,11 +1763,21 @@ impl HighlightConfiguration {
     }
 }
 
-impl<'a> HighlightIterLayer<'a> {
-    // First, sort scope boundaries by their byte offset in the document. At a
-    // given position, emit scope endings before scope beginnings. Finally, emit
-    // scope boundaries from deeper layers first.
-    fn sort_key(&mut self) -> Option<(usize, bool, isize)> {
+trait IterLayer {
+    type SortKey: PartialOrd;
+
+    fn sort_key(&mut self) -> Option<Self::SortKey>;
+
+    fn cursor(self) -> QueryCursor;
+}
+
+impl<'a> IterLayer for HighlightIterLayer<'a> {
+    type SortKey = (usize, bool, isize);
+
+    fn sort_key(&mut self) -> Option<Self::SortKey> {
+        // First, sort scope boundaries by their byte offset in the document. At a
+        // given position, emit scope endings before scope beginnings. Finally, emit
+        // scope boundaries from deeper layers first.
         let depth = -(self.depth as isize);
         let next_start = self
             .captures
@@ -1785,6 +1795,61 @@ impl<'a> HighlightIterLayer<'a> {
             (Some(i), None) => Some((i, true, depth)),
             (None, Some(j)) => Some((j, false, depth)),
             _ => None,
+        }
+    }
+
+    fn cursor(self) -> QueryCursor {
+        self.cursor
+    }
+}
+
+impl<'a> IterLayer for QueryIterLayer<'a> {
+    type SortKey = (usize, isize);
+
+    fn sort_key(&mut self) -> Option<Self::SortKey> {
+        // Sort the layers so that the first layer in the Vec has the next
+        // capture ordered by start byte and depth (descending).
+        let depth = -(self.layer.depth as isize);
+        let (match_, capture_index) = self.captures.peek()?;
+        let start = match_.captures[*capture_index].node.start_byte();
+
+        Some((start, depth))
+    }
+
+    fn cursor(self) -> QueryCursor {
+        self.cursor
+    }
+}
+
+fn sort_layers<L: IterLayer>(layers: &mut Vec<L>) {
+    while !layers.is_empty() {
+        if let Some(sort_key) = layers[0].sort_key() {
+            let mut i = 0;
+            while i + 1 < layers.len() {
+                if let Some(next_offset) = layers[i + 1].sort_key() {
+                    if next_offset < sort_key {
+                        i += 1;
+                        continue;
+                    }
+                } else {
+                    let layer = layers.remove(i + 1);
+                    PARSER.with(|ts_parser| {
+                        let highlighter = &mut ts_parser.borrow_mut();
+                        highlighter.cursors.push(layer.cursor());
+                    });
+                }
+                break;
+            }
+            if i > 0 {
+                layers[0..(i + 1)].rotate_left(1);
+            }
+            break;
+        } else {
+            let layer = layers.remove(0);
+            PARSER.with(|ts_parser| {
+                let highlighter = &mut ts_parser.borrow_mut();
+                highlighter.cursors.push(layer.cursor());
+            });
         }
     }
 }
@@ -1917,41 +1982,8 @@ impl<'a> HighlightIter<'a> {
         } else {
             result = event.map(Ok);
         }
-        self.sort_layers();
+        sort_layers(&mut self.layers);
         result
-    }
-
-    fn sort_layers(&mut self) {
-        while !self.layers.is_empty() {
-            if let Some(sort_key) = self.layers[0].sort_key() {
-                let mut i = 0;
-                while i + 1 < self.layers.len() {
-                    if let Some(next_offset) = self.layers[i + 1].sort_key() {
-                        if next_offset < sort_key {
-                            i += 1;
-                            continue;
-                        }
-                    } else {
-                        let layer = self.layers.remove(i + 1);
-                        PARSER.with(|ts_parser| {
-                            let highlighter = &mut ts_parser.borrow_mut();
-                            highlighter.cursors.push(layer.cursor);
-                        });
-                    }
-                    break;
-                }
-                if i > 0 {
-                    self.layers[0..(i + 1)].rotate_left(1);
-                }
-                break;
-            } else {
-                let layer = self.layers.remove(0);
-                PARSER.with(|ts_parser| {
-                    let highlighter = &mut ts_parser.borrow_mut();
-                    highlighter.cursors.push(layer.cursor);
-                });
-            }
-        }
     }
 }
 
@@ -2103,7 +2135,7 @@ impl<'a> Iterator for HighlightIter<'a> {
                     }
                 }
 
-                self.sort_layers();
+                sort_layers(&mut self.layers);
                 continue 'main;
             }
 
@@ -2112,7 +2144,7 @@ impl<'a> Iterator for HighlightIter<'a> {
             // a different layer, then skip over this one.
             if let Some((last_start, last_end, last_depth)) = self.last_highlight_range {
                 if range.start == last_start && range.end == last_end && layer.depth < last_depth {
-                    self.sort_layers();
+                    sort_layers(&mut self.layers);
                     continue 'main;
                 }
             }
@@ -2130,7 +2162,7 @@ impl<'a> Iterator for HighlightIter<'a> {
                         }
                     }
 
-                    self.sort_layers();
+                    sort_layers(&mut self.layers);
                     continue 'main;
                 }
             }
@@ -2165,7 +2197,7 @@ impl<'a> Iterator for HighlightIter<'a> {
                     .emit_event(range.start, Some(HighlightEvent::HighlightStart(highlight)));
             }
 
-            self.sort_layers();
+            sort_layers(&mut self.layers);
         }
     }
 }
@@ -2428,16 +2460,6 @@ impl<'a> fmt::Debug for QueryIterLayer<'a> {
     }
 }
 
-impl<'a> QueryIterLayer<'a> {
-    fn sort_key(&mut self) -> Option<(usize, isize)> {
-        let depth = -(self.layer.depth as isize);
-        let (match_, capture_index) = self.captures.peek()?;
-        let start = match_.captures[*capture_index].node.start_byte();
-
-        Some((start, depth))
-    }
-}
-
 #[derive(Debug)]
 pub struct QueryIter<'a> {
     layers: Vec<QueryIterLayer<'a>>,
@@ -2447,38 +2469,8 @@ impl<'a> Iterator for QueryIter<'a> {
     type Item = (&'a LanguageLayer, QueryMatch<'a, 'a>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Sort the layers so that the first layer in the Vec has the next
-        // capture ordered by start byte and depth (descending).
-        while !self.layers.is_empty() {
-            if let Some(sort_key) = self.layers[0].sort_key() {
-                let mut i = 0;
-                while i + 1 < self.layers.len() {
-                    if let Some(next_sort_key) = self.layers[i + 1].sort_key() {
-                        if next_sort_key < sort_key {
-                            i += 1;
-                            continue;
-                        }
-                    } else {
-                        let layer = self.layers.remove(i + 1);
-                        PARSER.with(|ts_parser| {
-                            let parser = &mut ts_parser.borrow_mut();
-                            parser.cursors.push(layer.cursor);
-                        });
-                    }
-                    break;
-                }
-                if i > 0 {
-                    self.layers[0..(i + 1)].rotate_left(1);
-                }
-                break;
-            } else {
-                let layer = self.layers.remove(0);
-                PARSER.with(|ts_parser| {
-                    let parser = &mut ts_parser.borrow_mut();
-                    parser.cursors.push(layer.cursor);
-                })
-            }
-        }
+        // Sort the layers so that the first layer contains the next capture.
+        sort_layers(&mut self.layers);
 
         // Emit the next capture from the lowest layer. If there are no more
         // layers, terminate.
