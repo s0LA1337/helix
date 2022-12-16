@@ -1672,6 +1672,18 @@ impl Syntax {
     // TODO: Folding
 }
 
+/// Finds the child of `node` which contains the given byte range `range`.
+pub fn child_for_byte_range(node: Node, range: std::ops::Range<usize>) -> Option<Node> {
+    for child in node.children(&mut node.walk()) {
+        let child_range = child.byte_range();
+        if range.start >= child_range.start && range.end <= child_range.end {
+            return Some(child);
+        }
+    }
+
+    None
+}
+
 bitflags! {
     /// Flags that track the status of a layer
     /// in the `Sytaxn::update` function
