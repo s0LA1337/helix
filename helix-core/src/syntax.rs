@@ -1087,7 +1087,7 @@ impl Syntax {
     where
         F: Fn(&'a HighlightConfiguration) -> &'a Query,
     {
-        let layers = self
+        let mut layers = self
             .layers
             .iter()
             .filter_map(|(_, layer)| {
@@ -1109,6 +1109,17 @@ impl Syntax {
                 })
             })
             .collect::<Vec<_>>();
+
+        // HAXXX: sort the layers by first range and then depth descending.
+        // This is only an appoximation of the correct sort order. In order
+        // to sort this correctly, `IterLayer::sort_key` must take `&self`
+        // instead of `&mut self`.
+        layers.sort_unstable_by_key(|layer| {
+            (
+                layer.layer.ranges.first().cloned(),
+                std::cmp::Reverse(layer.layer.depth),
+            )
+        });
 
         QueryIter { layers }
     }
