@@ -170,6 +170,7 @@ impl EditorView {
             highlights,
             &editor.config(),
         );
+        Self::render_text_highlights(doc, view.offset, inner, surface, theme, highlights, &config);
 
         let mut context_ln = None;
         if editor.config().sticky_context {
@@ -867,7 +868,7 @@ impl EditorView {
         surface: &mut Surface,
         theme: &Theme,
         is_focused: bool,
-        _context_ln: Option<Vec<usize>>,
+        context_ln: Option<Vec<usize>>,
     ) {
         let text = doc.text().slice(..);
         let last_line = view.last_line(doc);
@@ -894,7 +895,12 @@ impl EditorView {
             let mut gutter = gutter_type.style(editor, doc, view, theme, is_focused);
             let width = gutter_type.width(view, doc);
             text.reserve(width); // ensure there's enough space for the gutter
-            for (i, line) in (view.offset.row..(last_line + 1)).enumerate() {
+            for (i, mut line) in (view.offset.row..(last_line + 1)).enumerate() {
+                if let Some(ref line_numbers) = context_ln {
+                    if line_numbers.len() > i {
+                        line = line_numbers[i];
+                    }
+                }
                 let selected = cursors.contains(&line);
                 let x = viewport.x + offset;
                 let y = viewport.y + i as u16;
