@@ -58,8 +58,6 @@ on unix operating systems.
 | `bufferline` | Renders a line at the top of the editor displaying open buffers. Can be `always`, `never` or `multiple` (only shown if more than one buffer is in use) | `never` |
 | `color-modes` | Whether to color the mode indicator with different colors depending on the mode itself | `false` |
 | `rainbow-brackets` | Whether to render rainbow colors for matching brackets. Requires tree-sitter `rainbows.scm` queries for the language. | `false` |
-| `popup-border` | Draw border around `popup`, `menu`, `all`, or `none` | `none` |
-| `sticky-context` | Display context of current line if outside the view | `false` |
 
 ### `[editor.statusline]` Section
 

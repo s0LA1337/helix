@@ -47,6 +47,9 @@
   (closure_parameters)
 ] @rainbow.scope
 
+; attributes like `#[serde(rename_all = "kebab-case")]`
+(attribute arguments: (token_tree) @rainbow.scope)
+
 [
   "#"
   "[" "]"

@@ -18,8 +18,8 @@ For an example, let's add rainbow queries for the tree-sitter query (TSQ)
 language itself. These queries will go into a
 `runtime/queries/tsq/rainbows.scm` file in the repository root.
 
-First we'll add the `@rainbow.bracket` captures. As a scheme dialect, TSQ
-only has parentheses and square brackets:
+First we'll add the `@rainbow.bracket` captures. TSQ only has parentheses and
+square brackets:
 
 ```tsq
 ["(" ")" "[" "]"] @rainbow.bracket
@@ -44,10 +44,10 @@ taken into consideration.
 > Nodes written as literal strings in tree-sitter grammars may be captured
 > in queries with those same literal strings.
 
-Then we need make `@rainbow.scope` captures. The easiest way to do this is to
+Then we'll add `@rainbow.scope` captures. The easiest way to do this is to
 view the `grammar.js` file in the tree-sitter grammar's repository. For TSQ,
-that file is [here][tsq grammar.js]. As we scan down the `grammar.js`, we see
-that the `(alternation)`, (L36) `(group)` (L57), `(named_node)` (L59),
+that file is [here][tsq grammar.js]. As we scroll down the `grammar.js`, we
+see that the `(alternation)`, (L36) `(group)` (L57), `(named_node)` (L59),
 `(predicate)` (L87) and  `(wildcard_node)` (L97) nodes all contain literal
 parentheses or square brackets in their definitions. These nodes are all
 direct parents of brackets and happen to also be the nodes we want to change
@@ -75,10 +75,10 @@ to write a query.
 
 The `rainbow.include-children` property may be applied to `@rainbow.scope`
 captures. By default, all `@rainbow.bracket` captures must be direct descendant
-of a node captured with `@rainbow.scope` in order to be highlighted. This
-property disables that check and allows `@rainbow.bracket` captures to be
-highlighted if they are direct or indirect descendants of some node captured
-with `@rainbow.scope`.
+of a node captured with `@rainbow.scope` in a syntax tree in order to be
+highlighted. The `rainbow.include-children` property disables that check and
+allows `@rainbow.bracket` captures to be highlighted if they are direct or
+indirect descendants of some node captured with `@rainbow.scope`.
 
 For example, this property is used in the HTML rainbow queries.
 
@@ -86,10 +86,10 @@ For a document like `<a>link</a>`, the syntax tree is:
 
 ```tsq
 (element                   ; <a>link</a>
-  (start_tag               ; < >
+  (start_tag               ; <a>
     (tag_name))            ; a
   (text)                   ; link
-  (end_tag                 ; </ >
+  (end_tag                 ; </a>
     (tag_name)))           ; a
 ```
 
@@ -101,23 +101,31 @@ capture them as `@rainbow.bracket`:
 ```
 
 And we capture `(element)` as `@rainbow.scope` because `(element)` nodes nest
-within each other.
+within each other: they increment the nesting level and switch to the next
+color in the rainbow.
 
 ```tsq
 (element) @rainbow.scope
 ```
 
 But this combination of `@rainbow.scope` and `@rainbow.bracket` will not
-highlight any nodes: `<`, `>` and `</` are children of the `(start_tag)` and
+highlight any nodes. `<`, `>` and `</` are children of the `(start_tag)` and
 `(end_tag)` nodes. We can't capture `(start_tag)` and `(end_tag)` as
 `@rainbow.scope` because they don't nest other elements. We can fix this case
 by removing the requirement that `<`, `>` and `</` are direct descendants of
-`element` using the `rainbow.include-children` property.
+`(element)` using the `rainbow.include-children` property.
 
 ```tsq
 ((element) @rainbow.scope
  (#set! rainbow.include-children))
 ```
+
+With this property set, `<`, `>`, and `</` will highlight with rainbow colors
+even though they aren't direct descendents of the `(element)` node.
+
+`rainbow.include-children` is not necessary for the vast majority of programming
+languages. It is only necessary when the node that increments the nesting level
+(changes rainbow color) is not the direct parent of the bracket node.
 
 [syntax highlighting queries]: https://tree-sitter.github.io/tree-sitter/syntax-highlighting#highlights
 [query syntax]: https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries

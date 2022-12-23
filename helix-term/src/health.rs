@@ -12,7 +12,7 @@ pub enum TsFeature {
     Highlight,
     TextObject,
     AutoIndent,
-    RainbowPairs,
+    RainbowBrackets,
 }
 
 impl TsFeature {
@@ -21,7 +21,7 @@ impl TsFeature {
             Self::Highlight,
             Self::TextObject,
             Self::AutoIndent,
-            Self::RainbowPairs,
+            Self::RainbowBrackets,
         ]
     }
 
@@ -30,7 +30,7 @@ impl TsFeature {
             Self::Highlight => "highlights.scm",
             Self::TextObject => "textobjects.scm",
             Self::AutoIndent => "indents.scm",
-            Self::RainbowPairs => "rainbows.scm",
+            Self::RainbowBrackets => "rainbows.scm",
         }
     }
 
@@ -39,7 +39,7 @@ impl TsFeature {
             Self::Highlight => "Syntax Highlighting",
             Self::TextObject => "Treesitter Textobjects",
             Self::AutoIndent => "Auto Indent",
-            Self::RainbowPairs => "Rainbow Pairs",
+            Self::RainbowBrackets => "Rainbow Brackets",
         }
     }
 
@@ -48,7 +48,7 @@ impl TsFeature {
             Self::Highlight => "Highlight",
             Self::TextObject => "Textobject",
             Self::AutoIndent => "Indent",
-            Self::RainbowPairs => "Rainbow",
+            Self::RainbowBrackets => "Rainbow",
         }
     }
 }

@@ -1,10 +1,11 @@
-| Language | Syntax Highlighting | Treesitter Textobjects | Auto Indent | Rainbow Pairs | Default LSP |
+| Language | Syntax Highlighting | Treesitter Textobjects | Auto Indent | Rainbow Brackets | Default LSP |
 | --- | --- | --- | --- | --- | --- |
 | astro | ✓ |  |  |  |  |
 | awk | ✓ | ✓ |  |  | `awk-language-server` |
-| bash | ✓ |  |  | ✓ | `bash-language-server` |
+| bash | ✓ |  | ✓ | ✓ | `bash-language-server` |
 | bass | ✓ |  |  |  | `bass` |
 | beancount | ✓ |  |  |  |  |
+| bibtex | ✓ |  |  |  | `texlab` |
 | bicep | ✓ |  |  |  | `bicep-langserver` |
 | c | ✓ | ✓ | ✓ | ✓ | `clangd` |
 | c-sharp | ✓ | ✓ |  |  | `OmniSharp` |
@@ -12,8 +13,10 @@
 | clojure | ✓ |  |  | ✓ | `clojure-lsp` |
 | cmake | ✓ | ✓ | ✓ |  | `cmake-language-server` |
 | comment | ✓ |  |  |  |  |
+| common-lisp | ✓ |  |  |  | `cl-lsp` |
 | cpon | ✓ |  | ✓ |  |  |
 | cpp | ✓ | ✓ | ✓ | ✓ | `clangd` |
+| crystal | ✓ |  |  |  |  |
 | css | ✓ |  |  | ✓ | `vscode-css-language-server` |
 | cue | ✓ |  |  |  | `cuelsp` |
 | d | ✓ | ✓ | ✓ |  | `serve-d` |
@@ -49,14 +52,14 @@
 | gowork | ✓ |  |  |  | `gopls` |
 | graphql | ✓ |  |  |  |  |
 | hare | ✓ |  |  |  |  |
-| haskell | ✓ |  |  |  | `haskell-language-server-wrapper` |
+| haskell | ✓ | ✓ |  |  | `haskell-language-server-wrapper` |
 | hcl | ✓ |  | ✓ |  | `terraform-ls` |
 | heex | ✓ | ✓ |  |  | `elixir-ls` |
 | html | ✓ |  |  | ✓ | `vscode-html-language-server` |
 | idris |  |  |  |  | `idris2-lsp` |
 | iex | ✓ |  |  |  |  |
 | ini | ✓ |  |  |  |  |
-| java | ✓ |  |  | ✓ | `jdtls` |
+| java | ✓ | ✓ |  | ✓ | `jdtls` |
 | javascript | ✓ | ✓ | ✓ | ✓ | `typescript-language-server` |
 | jsdoc | ✓ |  |  |  |  |
 | json | ✓ |  | ✓ | ✓ | `vscode-json-language-server` |
@@ -75,6 +78,8 @@
 | make | ✓ |  |  |  |  |
 | markdown | ✓ |  |  |  | `marksman` |
 | markdown.inline | ✓ |  |  |  |  |
+| matlab | ✓ |  |  |  |  |
+| mermaid | ✓ |  |  |  |  |
 | meson | ✓ |  | ✓ |  |  |
 | mint |  |  |  |  | `mint` |
 | nickel | ✓ |  | ✓ |  | `nls` |
@@ -93,8 +98,9 @@
 | protobuf | ✓ |  | ✓ |  |  |
 | purescript | ✓ |  |  |  | `purescript-language-server` |
 | python | ✓ | ✓ | ✓ | ✓ | `pylsp` |
+| qml | ✓ |  | ✓ |  | `qmlls` |
 | r | ✓ |  |  |  | `R` |
-| racket |  |  |  |  | `racket` |
+| racket | ✓ |  |  |  | `racket` |
 | regex | ✓ |  |  | ✓ |  |
 | rescript | ✓ | ✓ |  |  | `rescript-language-server` |
 | rmarkdown | ✓ |  | ✓ |  | `R` |
@@ -131,6 +137,6 @@
 | wgsl | ✓ |  |  |  | `wgsl_analyzer` |
 | wit | ✓ |  | ✓ |  |  |
 | xit | ✓ |  |  |  |  |
-| xml | ✓ |  | ✓ |  |  |
+| xml | ✓ |  | ✓ | ✓ |  |
 | yaml | ✓ |  | ✓ | ✓ | `yaml-language-server` |
 | zig | ✓ | ✓ | ✓ | ✓ | `zls` |

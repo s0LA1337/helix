@@ -128,7 +128,11 @@ impl EditorView {
         }
 
         let mut highlights = Self::doc_syntax_highlights(doc, view.offset, inner.height, theme);
-        if editor.config().rainbow_brackets {
+        if doc
+            .language_config()
+            .and_then(|lang_config| lang_config.rainbow_brackets)
+            .unwrap_or(config.rainbow_brackets)
+        {
             highlights = Box::new(syntax::merge(
                 highlights,
                 Self::doc_rainbow_highlights(doc, view.offset, inner.height, theme),
@@ -287,66 +291,44 @@ impl EditorView {
         }
     }
 
-    /// Get rainbow highlights for a document in a view represented by the first line
-    /// and column (`offset`) and the last line.
     pub fn doc_rainbow_highlights(
         doc: &Document,
         offset: Position,
         height: u16,
         theme: &Theme,
     ) -> Vec<(usize, std::ops::Range<usize>)> {
-        use syntax::Highlight;
-        use HighlightEvent::*;
-
         let syntax = match doc.syntax() {
             Some(syntax) => syntax,
             None => return Vec::new(),
         };
 
         let text = doc.text().slice(..);
-        let last_line = std::cmp::min(
-            // Saturating subs to make it inclusive zero indexing.
-            (offset.row + height as usize).saturating_sub(1),
-            doc.text().len_lines().saturating_sub(1),
-        );
 
         // calculate viewport byte ranges
-        let visible_start = text.line_to_byte(offset.row);
-        let visible_end = text.line_to_byte(last_line + 1);
+        let last_line = doc.text().len_lines().saturating_sub(1);
+        let last_visible_line = (offset.row + height as usize)
+            .saturating_sub(1)
+            .min(last_line);
+        let visible_start = text.line_to_byte(offset.row.min(last_line));
+        let visible_end = text.line_to_byte(last_visible_line + 1);
 
         // The calculation for the current nesting level for rainbow highlights
         // depends on where we start the iterator from. For accuracy, we start
         // the iterator further back than the viewport: at the start of the containing
-        // non-root syntax-tree node. Then we `filter_map` to discard highlights
-        // that are not in view.
-        let syntax_node_start = helix_core::syntax::child_for_byte_range(
-            syntax.tree().root_node(),
-            visible_start..visible_start,
-        )
-        .map_or(visible_start, |node| node.byte_range().start);
+        // non-root syntax-tree node. Any spans that are off-screen are truncated when
+        // the spans are merged via [syntax::merge].
+        let syntax_node_start =
+            syntax::child_for_byte_range(syntax.tree().root_node(), visible_start..visible_start)
+                .map_or(visible_start, |node| node.byte_range().start);
         let syntax_node_range = syntax_node_start..visible_end;
 
-        let mut spans = Vec::new();
-        let mut highlight = None;
+        let mut spans = syntax.rainbow_spans(text, Some(syntax_node_range), theme.rainbow_length());
 
-        for event in syntax.rainbow_iter(
-            text.slice(..),
-            Some(syntax_node_range),
-            None,
-            theme.rainbow_length(),
-        ) {
-            match event.unwrap() {
-                HighlightStart(Highlight(h)) => highlight = Some(h),
-                Source { end, .. } if end <= visible_start => continue,
-                Source { start, end } if highlight.is_some() => {
-                    let start = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, start));
-                    let end = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, end));
+        for (_highlight, range) in spans.iter_mut() {
+            let start = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, range.start));
+            let end = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, range.end));
 
-                    spans.push((highlight.unwrap(), start..end))
-                }
-                HighlightEnd => highlight = None,
-                _ => (),
-            }
+            *range = start..end;
         }
 
         spans
