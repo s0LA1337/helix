@@ -129,6 +129,7 @@ pub struct LanguageConfiguration {
 
     /// If set, overrides rainbow brackets for a language.
     pub rainbow_brackets: Option<bool>,
+
     /// List of tree-sitter nodes that should be displayed in the sticky context.
     pub sticky_context_nodes: Option<Vec<String>>,
 }

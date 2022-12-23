@@ -960,11 +960,6 @@ impl Editor {
             .reset(Instant::now() + config.idle_timeout);
     }
 
-    fn redraw_deadline(&self) -> Instant {
-        let config = self.config();
-        Instant::now() + config.redraw_timeout
-    }
-
     pub fn clear_status(&mut self) {
         self.status_msg = None;
     }

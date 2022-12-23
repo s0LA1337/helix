@@ -19,7 +19,7 @@ use helix_core::{
 use helix_view::{
     apply_transaction,
     document::{Mode, SCRATCH_BUFFER_NAME},
-    editor::{CompleteAction, CursorShapeConfig, RainbowIndentOptions, LineNumber},
+    editor::{CompleteAction, CursorShapeConfig, LineNumber, RainbowIndentOptions},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
@@ -128,6 +128,7 @@ impl EditorView {
         }
 
         let mut highlights = Self::doc_syntax_highlights(doc, view.offset, inner.height, theme);
+
         if doc
             .language_config()
             .and_then(|lang_config| lang_config.rainbow_brackets)
@@ -170,7 +171,6 @@ impl EditorView {
             highlights,
             &editor.config(),
         );
-        Self::render_text_highlights(doc, view.offset, inner, surface, theme, highlights, &config);
 
         let mut context_ln = None;
         if editor.config().sticky_context {
