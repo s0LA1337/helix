@@ -115,7 +115,70 @@ impl Default for FilePickerConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExplorerStyle {
+    Tree,
+    List,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExplorerPosition {
+    Embed,
+    Overlay,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+pub struct ExplorerConfig {
+    pub style: ExplorerStyle,
+    pub position: ExplorerPosition,
+    /// explorer column width
+    pub column_width: usize,
+}
+
+impl ExplorerConfig {
+    pub fn is_embed(&self) -> bool {
+        match self.position {
+            ExplorerPosition::Embed => true,
+            ExplorerPosition::Overlay => false,
+        }
+    }
+
+    pub fn is_overlay(&self) -> bool {
+        match self.position {
+            ExplorerPosition::Embed => false,
+            ExplorerPosition::Overlay => true,
+        }
+    }
+
+    pub fn is_list(&self) -> bool {
+        match self.style {
+            ExplorerStyle::List => true,
+            ExplorerStyle::Tree => false,
+        }
+    }
+
+    pub fn is_tree(&self) -> bool {
+        match self.style {
+            ExplorerStyle::List => false,
+            ExplorerStyle::Tree => true,
+        }
+    }
+}
+
+impl Default for ExplorerConfig {
+    fn default() -> Self {
+        Self {
+            style: ExplorerStyle::Tree,
+            position: ExplorerPosition::Overlay,
+            column_width: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 pub struct Config {
     /// Padding to keep between the edge of the screen and the cursor when scrolling. Defaults to 5.
@@ -153,6 +216,14 @@ pub struct Config {
         deserialize_with = "deserialize_duration_millis"
     )]
     pub idle_timeout: Duration,
+    /// Time in milliseconds since last keypress before a redraws trigger.
+    /// Used for redrawing asynchronsouly computed UI compoenents, set to 0 for instant.
+    /// Defaults to 100ms.
+    #[serde(
+        serialize_with = "serialize_duration_millis",
+        deserialize_with = "deserialize_duration_millis"
+    )]
+    pub redraw_timeout: Duration,
     pub completion_trigger_len: u8,
     /// Whether to display infoboxes. Defaults to true.
     pub auto_info: bool,
@@ -178,6 +249,14 @@ pub struct Config {
     pub indent_guides: IndentGuidesConfig,
     /// Whether to color modes with different colors. Defaults to `false`.
     pub color_modes: bool,
+    /// Whether to render rainbow highlights. Defaults to `false`.
+    pub rainbow_brackets: bool,
+    /// Draw border around popups.
+    pub popup_border: PopupBorderConfig,
+    /// explore config
+    pub explorer: ExplorerConfig,
+    /// Display context of current cursor line if it is outside the view.
+    pub sticky_context: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -572,10 +651,19 @@ impl Default for WhitespaceCharacters {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RainbowIndentOptions {
+    None,
+    Dim,
+    Normal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct IndentGuidesConfig {
     pub render: bool,
     pub character: char,
+    pub rainbow: RainbowIndentOptions,
     pub skip_levels: u8,
 }
 
@@ -585,8 +673,18 @@ impl Default for IndentGuidesConfig {
             skip_levels: 0,
             render: false,
             character: '│',
+            rainbow: RainbowIndentOptions::None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PopupBorderConfig {
+    None,
+    All,
+    Popup,
+    Menu,
 }
 
 impl Default for Config {
@@ -630,6 +728,11 @@ impl Default for Config {
             bufferline: BufferLine::default(),
             indent_guides: IndentGuidesConfig::default(),
             color_modes: false,
+            rainbow_brackets: true,
+            popup_border: PopupBorderConfig::None,
+            explorer: ExplorerConfig::default(),
+            sticky_context: false,
+            redraw_timeout: Duration::from_millis(200),
         }
     }
 }
@@ -857,6 +960,11 @@ impl Editor {
             .reset(Instant::now() + config.idle_timeout);
     }
 
+    fn redraw_deadline(&self) -> Instant {
+        let config = self.config();
+        Instant::now() + config.redraw_timeout
+    }
+
     pub fn clear_status(&mut self) {
         self.status_msg = None;
     }
@@ -911,8 +1019,7 @@ impl Editor {
             return;
         }
 
-        let scopes = theme.scopes();
-        self.syn_loader.set_scopes(scopes.to_vec());
+        self.syn_loader.set_scopes(theme.scopes().to_vec());
 
         match preview {
             ThemeAction::Preview => {

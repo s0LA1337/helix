@@ -57,6 +57,9 @@ on unix operating systems.
 | `rulers` | List of column positions at which to display the rulers. Can be overridden by language specific `rulers` in `languages.toml` file. | `[]` |
 | `bufferline` | Renders a line at the top of the editor displaying open buffers. Can be `always`, `never` or `multiple` (only shown if more than one buffer is in use) | `never` |
 | `color-modes` | Whether to color the mode indicator with different colors depending on the mode itself | `false` |
+| `rainbow-brackets` | Whether to render rainbow colors for matching brackets. Requires tree-sitter `rainbows.scm` queries for the language. | `false` |
+| `popup-border` | Draw border around `popup`, `menu`, `all`, or `none` | `none` |
+| `sticky-context` | Display context of current line if outside the view | `false` |
 
 ### `[editor.statusline]` Section
 
@@ -171,6 +174,8 @@ auto-pairs = false # defaults to `true`
 The default pairs are <code>(){}[]''""``</code>, but these can be customized by
 setting `auto-pairs` to a TOML table:
 
+Example
+
 ```toml
 [editor.auto-pairs]
 '(' = ')'
@@ -241,17 +246,29 @@ tabpad = "·" # Tabs will look like "→···" (depending on tab width)
 
 Options for rendering vertical indent guides.
 
-| Key           | Description                                             | Default |
-| ---           | ---                                                     | ---     |
-| `render`      | Whether to render indent guides.                        | `false` |
-| `character`   | Literal character to use for rendering the indent guide | `│`     |
-| `skip-levels` | Number of indent levels to skip                         | `0`     |
+| Key           | Description                                                                                     | Default |
+| ---           | ---                                                                                             | ---     |
+| `render`      | Whether to render indent guides.                                                                | `false` |
+| `character`   | Literal character to use for rendering the indent guide                                         | `│`     |
+| `rainbow`     | Whether or not the indent guides shall have changing colors. It can be `none`, `dim` or `normal`| `none`  |
+| `skip-levels` | Number of indent levels to skip                                                                 | `0`     |
 
 Example:
 
 ```toml
 [editor.indent-guides]
 render = true
+character = "╎"
+rainbow = "normal"
 character = "╎" # Some characters that work well: "▏", "┆", "┊", "⸽"
 skip-levels = 1
 ```
+
+### `[editor.explorer]` Section
+Sets explorer side width and style.
+
+ | Key            | Description                                                                              | Default |
+ | ---            | -----------                                                                              | ------- |
+ | `column-width` | explorer side width                                                                      | 30      |
+ | `style`        | explorer item style, tree or list                                                        | tree    |
+ | `position`     | explorer widget position, embed or overlay                                               | overlay |

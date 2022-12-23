@@ -4,7 +4,7 @@ use crate::{
     job::{self, Callback},
     key,
     keymap::{KeymapResult, Keymaps},
-    ui::{Completion, ProgressSpinners},
+    ui::{overlay::Overlay, Completion, Explorer, ProgressSpinners},
 };
 
 use helix_core::{
@@ -19,13 +19,13 @@ use helix_core::{
 use helix_view::{
     apply_transaction,
     document::{Mode, SCRATCH_BUFFER_NAME},
-    editor::{CompleteAction, CursorShapeConfig},
+    editor::{CompleteAction, CursorShapeConfig, RainbowIndentOptions, LineNumber},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
     Document, Editor, Theme, View,
 };
-use std::{borrow::Cow, cmp::min, num::NonZeroUsize, path::PathBuf};
+use std::{borrow::Cow, num::NonZeroUsize, path::PathBuf};
 
 use tui::buffer::Buffer as Surface;
 
@@ -39,6 +39,7 @@ pub struct EditorView {
     last_insert: (commands::MappableCommand, Vec<InsertEvent>),
     pub(crate) completion: Option<Completion>,
     spinners: ProgressSpinners,
+    pub(crate) explorer: Option<Overlay<Explorer>>,
 }
 
 #[derive(Debug, Clone)]
@@ -63,6 +64,7 @@ impl EditorView {
             last_insert: (commands::MappableCommand::normal_mode, Vec::new()),
             completion: None,
             spinners: ProgressSpinners::default(),
+            explorer: None,
         }
     }
 
@@ -126,6 +128,12 @@ impl EditorView {
         }
 
         let mut highlights = Self::doc_syntax_highlights(doc, view.offset, inner.height, theme);
+        if editor.config().rainbow_brackets {
+            highlights = Box::new(syntax::merge(
+                highlights,
+                Self::doc_rainbow_highlights(doc, view.offset, inner.height, theme),
+            ));
+        }
         for diagnostic in Self::doc_diagnostics_highlights(doc, theme) {
             // Most of the `diagnostic` Vecs are empty most of the time. Skipping
             // a merge for any empty Vec saves a significant amount of work.
@@ -149,8 +157,22 @@ impl EditorView {
             Box::new(highlights)
         };
 
-        Self::render_text_highlights(doc, view.offset, inner, surface, theme, highlights, &config);
-        Self::render_gutter(editor, doc, view, view.area, surface, theme, is_focused);
+        Self::render_text_highlights(
+            doc,
+            view.offset,
+            inner,
+            surface,
+            theme,
+            highlights,
+            &editor.config(),
+        );
+
+        let mut context_ln = None;
+        if editor.config().sticky_context {
+            context_ln = Self::render_sticky_context(editor, doc, view, surface, theme);
+        }
+
+        Self::render_gutter(editor, doc, view, surface, theme, is_focused, context_ln);
         Self::render_rulers(editor, doc, view, inner, surface, theme);
 
         if is_focused {
@@ -263,6 +285,71 @@ impl EditorView {
                 .into_iter(),
             ),
         }
+    }
+
+    /// Get rainbow highlights for a document in a view represented by the first line
+    /// and column (`offset`) and the last line.
+    pub fn doc_rainbow_highlights(
+        doc: &Document,
+        offset: Position,
+        height: u16,
+        theme: &Theme,
+    ) -> Vec<(usize, std::ops::Range<usize>)> {
+        use syntax::Highlight;
+        use HighlightEvent::*;
+
+        let syntax = match doc.syntax() {
+            Some(syntax) => syntax,
+            None => return Vec::new(),
+        };
+
+        let text = doc.text().slice(..);
+        let last_line = std::cmp::min(
+            // Saturating subs to make it inclusive zero indexing.
+            (offset.row + height as usize).saturating_sub(1),
+            doc.text().len_lines().saturating_sub(1),
+        );
+
+        // calculate viewport byte ranges
+        let visible_start = text.line_to_byte(offset.row);
+        let visible_end = text.line_to_byte(last_line + 1);
+
+        // The calculation for the current nesting level for rainbow highlights
+        // depends on where we start the iterator from. For accuracy, we start
+        // the iterator further back than the viewport: at the start of the containing
+        // non-root syntax-tree node. Then we `filter_map` to discard highlights
+        // that are not in view.
+        let syntax_node_start = helix_core::syntax::child_for_byte_range(
+            syntax.tree().root_node(),
+            visible_start..visible_start,
+        )
+        .map_or(visible_start, |node| node.byte_range().start);
+        let syntax_node_range = syntax_node_start..visible_end;
+
+        let mut spans = Vec::new();
+        let mut highlight = None;
+
+        for event in syntax.rainbow_iter(
+            text.slice(..),
+            Some(syntax_node_range),
+            None,
+            theme.rainbow_length(),
+        ) {
+            match event.unwrap() {
+                HighlightStart(Highlight(h)) => highlight = Some(h),
+                Source { end, .. } if end <= visible_start => continue,
+                Source { start, end } if highlight.is_some() => {
+                    let start = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, start));
+                    let end = text.byte_to_char(ensure_grapheme_boundary_next_byte(text, end));
+
+                    spans.push((highlight.unwrap(), start..end))
+                }
+                HighlightEnd => highlight = None,
+                _ => (),
+            }
+        }
+
+        spans
     }
 
     /// Get highlight spans for document diagnostics
@@ -403,6 +490,89 @@ impl EditorView {
         spans
     }
 
+    pub fn render_sticky_context(
+        editor: &Editor,
+        doc: &Document,
+        view: &View,
+        surface: &mut Surface,
+        theme: &Theme,
+    ) -> Option<Vec<usize>> {
+        let syntax = doc.syntax()?;
+        let tree = syntax.tree();
+        let text = doc.text().slice(..);
+        let cursor_byte = doc.selection(view.id).primary().cursor(text);
+        let context_nodes = doc
+            .language_config()
+            .and_then(|lc| lc.sticky_context_nodes.as_ref());
+
+        let mut parent = tree
+            .root_node()
+            .descendant_for_byte_range(cursor_byte, cursor_byte)
+            .and_then(|n| n.parent());
+
+        // context is list of numbers of lines that should be rendered in the LSP context
+        let mut context: Vec<usize> = Vec::new();
+
+        while let Some(node) = parent {
+            let line = text.byte_to_line(node.start_byte());
+
+            // if parent of previous node is still on the same line, use the parent node
+            if let Some(&prev_line) = context.last() {
+                if prev_line == line {
+                    context.pop();
+                }
+            }
+
+            if context_nodes.map_or(true, |nodes| nodes.iter().any(|n| n == node.kind())) {
+                context.push(line);
+            }
+
+            parent = node.parent();
+        }
+
+        // we render from top most (last in the list)
+        context.reverse();
+
+        // TODO: this probably needs it's own style, although it seems to work well even with cursorline
+        let context_style = theme.get("ui.cursorline.primary");
+        let mut context_area = view.inner_area(doc);
+        context_area.height = 1;
+
+        let mut line_numbers = Vec::new();
+        for line_num in context {
+            if line_num >= view.offset.row {
+                continue;
+            }
+            surface.clear_with(context_area, context_style);
+
+            let offset = Position::new(line_num, 0);
+            let highlights = Self::doc_syntax_highlights(doc, offset, 1, theme);
+            Self::render_text_highlights(
+                doc,
+                offset,
+                context_area,
+                surface,
+                theme,
+                highlights,
+                &editor.config(),
+            );
+
+            context_area.y += 1;
+            let line_number = match editor.config().line_number {
+                LineNumber::Absolute => line_num,
+                LineNumber::Relative => {
+                    let res = text.byte_to_line(cursor_byte) - line_num;
+                    match res {
+                        n if n < 2 => 1,
+                        _ => res - 1,
+                    }
+                }
+            };
+            line_numbers.push(line_number);
+        }
+        Some(line_numbers)
+    }
+
     pub fn render_text_highlights<H: Iterator<Item = HighlightEvent>>(
         doc: &Document,
         offset: Position,
@@ -462,19 +632,27 @@ impl EditorView {
             let starting_indent =
                 (offset.col / tab_width) + config.indent_guides.skip_levels as usize;
 
-            // Don't draw indent guides outside of view
-            let end_indent = min(
-                indent_level,
-                // Add tab_width - 1 to round up, since the first visible
-                // indent might be a bit after offset.col
-                offset.col + viewport.width as usize + (tab_width - 1),
-            ) / tab_width;
+            let modifier = if config.indent_guides.rainbow == RainbowIndentOptions::Dim {
+                Modifier::DIM
+            } else {
+                Modifier::empty()
+            };
 
-            for i in starting_indent..end_indent {
-                let x = (viewport.x as usize + (i * tab_width) - offset.col) as u16;
-                let y = viewport.y + line;
-                debug_assert!(surface.in_bounds(x, y));
-                surface.set_string(x, y, &indent_guide_char, indent_guide_style);
+            for i in starting_indent..(indent_level / tab_width) {
+                let style = if config.indent_guides.rainbow != RainbowIndentOptions::None {
+                    indent_guide_style
+                        .patch(theme.get_rainbow(i as usize))
+                        .add_modifier(modifier)
+                } else {
+                    indent_guide_style
+                };
+
+                surface.set_string(
+                    viewport.x + (i as u16 * tab_width as u16) - offset.col as u16,
+                    viewport.y + line,
+                    &indent_guide_char,
+                    style,
+                );
             }
         };
 
@@ -704,13 +882,14 @@ impl EditorView {
         editor: &Editor,
         doc: &Document,
         view: &View,
-        viewport: Rect,
         surface: &mut Surface,
         theme: &Theme,
         is_focused: bool,
+        _context_ln: Option<Vec<usize>>,
     ) {
         let text = doc.text().slice(..);
         let last_line = view.last_line(doc);
+        let viewport = view.area;
 
         // it's used inside an iterator so the collect isn't needless:
         // https://github.com/rust-lang/rust-clippy/issues/6164
@@ -1299,6 +1478,11 @@ impl Component for EditorView {
         event: &Event,
         context: &mut crate::compositor::Context,
     ) -> EventResult {
+        if let Some(explore) = self.explorer.as_mut() {
+            if let EventResult::Consumed(callback) = explore.handle_event(event, context) {
+                return EventResult::Consumed(callback);
+            }
+        }
         let mut cx = commands::Context {
             editor: context.editor,
             count: None,
@@ -1462,7 +1646,17 @@ impl Component for EditorView {
         }
 
         // if the terminal size suddenly changed, we need to trigger a resize
-        cx.editor.resize(editor_area);
+        if self.explorer.is_some() && (config.explorer.is_embed()) {
+            editor_area = editor_area.clip_left(config.explorer.column_width as u16 + 2);
+        }
+
+        cx.editor.resize(editor_area); // -1 from bottom for commandline
+
+        if let Some(explore) = self.explorer.as_mut() {
+            if !explore.content.is_focus() && config.explorer.is_embed() {
+                explore.content.render(area, surface, cx);
+            }
+        }
 
         if use_bufferline {
             Self::render_bufferline(cx.editor, area.with_height(1), surface);
@@ -1542,9 +1736,30 @@ impl Component for EditorView {
         if let Some(completion) = self.completion.as_mut() {
             completion.render(area, surface, cx);
         }
+
+        if let Some(explore) = self.explorer.as_mut() {
+            if explore.content.is_focus() {
+                if config.explorer.is_embed() {
+                    explore.content.render(area, surface, cx);
+                } else {
+                    explore.render(area, surface, cx);
+                }
+            }
+        }
     }
 
     fn cursor(&self, _area: Rect, editor: &Editor) -> (Option<Position>, CursorKind) {
+        if let Some(explore) = &self.explorer {
+            if explore.content.is_focus() {
+                if editor.config().explorer.is_overlay() {
+                    return explore.cursor(_area, editor);
+                }
+                let cursor = explore.content.cursor(_area, editor);
+                if cursor.0.is_some() {
+                    return cursor;
+                }
+            }
+        }
         match editor.cursor() {
             // All block cursors are drawn manually
             (pos, CursorKind::Block) => (pos, CursorKind::Hidden),
