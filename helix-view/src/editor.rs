@@ -350,6 +350,8 @@ pub struct StatusLineConfig {
     pub right: Vec<StatusLineElement>,
     pub separator: String,
     pub mode: ModeConfig,
+    /// Seperator after statusline mode. Best used with 'color-modes = true'. Defaults to "".
+    pub mode_separator: String,
 }
 
 impl Default for StatusLineConfig {
@@ -362,6 +364,7 @@ impl Default for StatusLineConfig {
             right: vec![E::Diagnostics, E::Selections, E::Position, E::FileEncoding],
             separator: String::from("│"),
             mode: ModeConfig::default(),
+            mode_separator: String::from(""),
         }
     }
 }
