@@ -446,7 +446,7 @@ impl Component for Completion {
                 None => return,
             };
 
-            let (popup_x, popup_y) = self.popup.get_rel_position(area, cx);
+            let (popup_x, popup_y) = self.popup.get_rel_position(area, cx.editor);
             let (popup_width, _popup_height) = self.popup.get_size();
             let mut width = area
                 .width
@@ -483,5 +483,9 @@ impl Component for Completion {
             surface.clear_with(area, background);
             markdown_doc.render(area, surface, cx);
         }
+    }
+
+    fn area(&mut self, viewport: Rect, editor: &Editor) -> Option<Rect> {
+        self.popup.area(viewport, editor)
     }
 }
