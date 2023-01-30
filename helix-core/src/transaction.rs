@@ -466,6 +466,42 @@ impl Transaction {
         self
     }
 
+    /// Generate a transaction from a set of potentially overallping changes.
+    /// Changes that overlap are ignored
+    pub fn change_ignore_overlapping<I>(doc: &Rope, changes: I) -> Self
+    where
+        I: Iterator<Item = Change>,
+    {
+        let len = doc.len_chars();
+
+        let (lower, upper) = changes.size_hint();
+        let size = upper.unwrap_or(lower);
+        let mut changeset = ChangeSet::with_capacity(2 * size + 1); // rough estimate
+
+        let mut last = 0;
+        for (from, to, tendril) in changes {
+            if last > from {
+                continue;
+            }
+
+            // Retain from last "to" to current "from"
+            changeset.retain(from - last);
+            let span = to - from;
+            match tendril {
+                Some(text) => {
+                    changeset.insert(text);
+                    changeset.delete(span);
+                }
+                None => changeset.delete(span),
+            }
+            last = to;
+        }
+
+        changeset.retain(len - last);
+
+        Self::from(changeset)
+    }
+
     /// Generate a transaction from a set of changes.
     pub fn change<I>(doc: &Rope, changes: I) -> Self
     where
@@ -511,6 +547,19 @@ impl Transaction {
         F: FnMut(&Range) -> Change,
     {
         Self::change(doc, selection.iter().map(f))
+    }
+
+    /// Generate a transaction with a change per selection range.
+    /// Overlapping changes are ignored
+    pub fn change_by_selection_ignore_overlapping<F>(
+        doc: &Rope,
+        selection: &Selection,
+        f: F,
+    ) -> Self
+    where
+        F: FnMut(&Range) -> Change,
+    {
+        Self::change_ignore_overlapping(doc, selection.iter().map(f))
     }
 
     /// Insert text at each selection head.

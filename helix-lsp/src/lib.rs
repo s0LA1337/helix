@@ -271,10 +271,17 @@ pub mod util {
             None => return Transaction::new(doc),
         };
 
-        Transaction::change_by_selection(doc, selection, |range| {
+        Transaction::change_by_selection_ignore_overlapping(doc, selection, |range| {
             let cursor = range.cursor(text);
+            let start = cursor as i128 + start_offset;
+            let end = (cursor as i128 + end_offset) as usize;
+            // if inserting a completion at this cursor would go out of bounds
+            // return a trivial edit
+            if start < 0 || end > doc.len_chars() {
+                return (0, 0, None);
+            }
             (
-                (cursor as i128 + start_offset) as usize,
+                start as usize,
                 (cursor as i128 + end_offset) as usize,
                 replacement.clone(),
             )
