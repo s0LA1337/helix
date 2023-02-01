@@ -1248,7 +1248,7 @@ impl Syntax {
     where
         F: Fn(&'a HighlightConfiguration) -> &'a Query,
     {
-        let layers = self
+        let mut layers: Vec<_> = self
             .layers
             .iter()
             .filter_map(|(_, layer)| {
@@ -1280,11 +1280,13 @@ impl Syntax {
 
                 Some(QueryIterLayer {
                     cursor,
-                    captures,
+                    captures: RefCell::new(captures),
                     layer,
                 })
             })
             .collect();
+
+        layers.sort_unstable_by_key(|layer| layer.sort_key());
 
         QueryIter { layers }
     }
@@ -2056,11 +2058,21 @@ impl HighlightConfiguration {
     }
 }
 
-impl<'a> HighlightIterLayer<'a> {
-    // First, sort scope boundaries by their byte offset in the document. At a
-    // given position, emit scope endings before scope beginnings. Finally, emit
-    // scope boundaries from deeper layers first.
-    fn sort_key(&self) -> Option<(usize, bool, isize)> {
+trait IterLayer {
+    type SortKey: PartialOrd;
+
+    fn sort_key(&self) -> Option<Self::SortKey>;
+
+    fn cursor(self) -> QueryCursor;
+}
+
+impl<'a> IterLayer for HighlightIterLayer<'a> {
+    type SortKey = (usize, bool, isize);
+
+    fn sort_key(&self) -> Option<Self::SortKey> {
+        // First, sort scope boundaries by their byte offset in the document. At a
+        // given position, emit scope endings before scope beginnings. Finally, emit
+        // scope boundaries from deeper layers first.
         let depth = -(self.depth as isize);
         let next_start = self
             .captures
@@ -2081,6 +2093,30 @@ impl<'a> HighlightIterLayer<'a> {
             _ => None,
         }
     }
+
+    fn cursor(self) -> QueryCursor {
+        self.cursor
+    }
+}
+
+impl<'a> IterLayer for QueryIterLayer<'a> {
+    type SortKey = (usize, isize);
+
+    fn sort_key(&self) -> Option<Self::SortKey> {
+        // Sort the layers so that the first layer in the Vec has the next
+        // capture ordered by start byte and depth (descending).
+        let depth = -(self.layer.depth as isize);
+        let mut captures = self.captures.borrow_mut();
+        let (match_, capture_index) = captures.peek()?;
+        let start = match_.captures[*capture_index].node.start_byte();
+
+        Some((start, depth))
+    }
+
+    fn cursor(self) -> QueryCursor {
+        self.cursor
+    }
+}
 }
 
 #[derive(Clone)]
@@ -2740,6 +2776,7 @@ impl<'a> Iterator for QueryIter<'a> {
         let inner = layer.layer;
         layer
             .captures
+            .borrow_mut()
             .next()
             .map(|(match_, index)| (inner, match_, index))
     }
