@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use helix_core::syntax;
+use helix_view::editor::PopupBorderConfig;
 use helix_view::graphics::{Margin, Rect, Style};
 use tui::buffer::Buffer;
 use tui::widgets::{BorderType, Paragraph, Widget, Wrap};
@@ -92,7 +93,13 @@ impl Component for SignatureHelp {
             Some(doc) => Markdown::new(doc.clone(), Arc::clone(&self.config_loader)),
         };
         let sig_doc = sig_doc.parse(Some(&cx.editor.theme));
-        let sig_doc_area = area.clip_top(sig_text_area.height + 2);
+        let mut sig_doc_area = area.clip_top(sig_text_area.height + 2);
+
+        let border_config = &cx.editor.config().popup_border;
+
+        if border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Popup {
+            sig_doc_area = sig_doc_area.clip_bottom(1);
+        }
         let sig_doc_para = Paragraph::new(sig_doc)
             .wrap(Wrap { trim: false })
             .scroll((cx.scroll.unwrap_or_default() as u16, 0));
