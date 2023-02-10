@@ -50,7 +50,10 @@ use crate::{
     compositor::{self, Component, Compositor},
     job::Callback,
     keymap::ReverseKeymap,
-    ui::{self, overlay::overlayed, FilePicker, Picker, Popup, Prompt, PromptEvent},
+    ui::{
+        self, lsp::SignatureHelp, overlay::overlayed, FilePicker, Picker, Popup, Prompt,
+        PromptEvent,
+    },
 };
 
 use crate::job::{self, Jobs};
@@ -2056,16 +2059,10 @@ fn extend_line_impl(cx: &mut Context, extend: Extend) {
     let selection = doc.selection(view.id).clone().transform(|range| {
         let (start_line, end_line) = range.line_range(text.slice(..));
 
-        let start = text.line_to_char(match extend {
-            Extend::Above => start_line.saturating_sub(count - 1),
-            Extend::Below => start_line,
-        });
+        let start = text.line_to_char(start_line);
         let end = text.line_to_char(
-            match extend {
-                Extend::Above => end_line + 1, // the start of next line
-                Extend::Below => end_line + count,
-            }
-            .min(text.len_lines()),
+            (end_line + 1) // newline of end_line
+                .min(text.len_lines()),
         );
 
         // extend to previous/next line if current line is selected
@@ -2079,8 +2076,11 @@ fn extend_line_impl(cx: &mut Context, extend: Extend) {
             }
         } else {
             match extend {
-                Extend::Above => (end, start),
-                Extend::Below => (start, end),
+                Extend::Above => (end, text.line_to_char(start_line.saturating_sub(count - 1))),
+                Extend::Below => (
+                    start,
+                    text.line_to_char((end_line + count).min(text.len_lines())),
+                ),
             }
         };
 
@@ -3213,8 +3213,7 @@ pub mod insert {
                 let on_auto_pair = doc
                     .auto_pairs(cx.editor)
                     .and_then(|pairs| pairs.get(prev))
-                    .and_then(|pair| if pair.close == curr { Some(pair) } else { None })
-                    .is_some();
+                    .map_or(false, |pair| pair.open == prev && pair.close == curr);
 
                 let local_offs = if on_auto_pair {
                     let inner_indent = indent.clone() + doc.indent_style.as_str();
@@ -4112,15 +4111,27 @@ pub fn completion(cx: &mut Context) {
                 return;
             }
             let size = compositor.size();
+            let signature_help_area = compositor
+                .find_id::<Popup<SignatureHelp>>(SignatureHelp::ID)
+                .map(|signature_help| signature_help.area(size, editor));
             let ui = compositor.find::<ui::EditorView>().unwrap();
-            ui.set_completion(
-                editor,
-                items,
-                offset_encoding,
-                start_offset,
-                trigger_offset,
-                size,
-            );
+
+            // Delete the signature help popup if they intersect.
+            if ui
+                .set_completion(
+                    editor,
+                    items,
+                    offset_encoding,
+                    start_offset,
+                    trigger_offset,
+                    size,
+                )
+                .zip(signature_help_area)
+                .filter(|(a, b)| a.intersects(*b))
+                .is_some()
+            {
+                compositor.remove(SignatureHelp::ID);
+            }
         },
     );
 }

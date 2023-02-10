@@ -364,6 +364,10 @@ impl Completion {
 
         true
     }
+
+    pub fn area(&mut self, viewport: Rect, editor: &Editor) -> Rect {
+        self.popup.area(viewport, editor)
+    }
 }
 
 impl Component for Completion {
@@ -446,7 +450,7 @@ impl Component for Completion {
                 None => return,
             };
 
-            let (popup_x, popup_y) = self.popup.get_rel_position(area, cx);
+            let (popup_x, popup_y) = self.popup.get_rel_position(area, cx.editor);
             let (popup_width, _popup_height) = self.popup.get_size();
             let mut width = area
                 .width

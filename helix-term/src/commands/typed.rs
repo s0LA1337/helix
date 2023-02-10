@@ -65,9 +65,10 @@ fn open(cx: &mut compositor::Context, args: &[Cow<str>], event: PromptEvent) -> 
     ensure!(!args.is_empty(), "wrong argument count");
     for arg in args {
         let (path, pos) = args::parse_file(arg);
+        let path = helix_core::path::expand_tilde(&path);
         // If the path is a directory, open a file picker on that directory and update the status
         // message
-        if std::fs::canonicalize(&path)?.is_dir() {
+        if let Ok(true) = std::fs::canonicalize(&path).map(|p| p.is_dir()) {
             let callback = async move {
                 let call: job::Callback = job::Callback::EditorCompositor(Box::new(
                     move |editor: &mut Editor, compositor: &mut Compositor| {
@@ -1796,7 +1797,7 @@ fn run_shell_command(
     let shell = &cx.editor.config().shell;
     let (output, success) = shell_impl(shell, &args.join(" "), None)?;
     if success {
-        cx.editor.set_status("Command succeed");
+        cx.editor.set_status("Command succeeded");
     } else {
         cx.editor.set_error("Command failed");
     }
