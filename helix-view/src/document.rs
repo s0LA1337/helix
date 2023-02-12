@@ -1154,6 +1154,7 @@ impl Document {
         &self.selections[&view_id]
     }
 
+    #[inline]
     pub fn selections(&self) -> &HashMap<ViewId, Selection> {
         &self.selections
     }
