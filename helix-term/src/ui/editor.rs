@@ -494,9 +494,13 @@ impl EditorView {
             .and_then(|n| n.parent());
 
         // context is list of numbers of lines that should be rendered in the LSP context
+        let max_depth = 15;
         let mut context: Vec<usize> = Vec::new();
 
         while let Some(node) = parent {
+            if context.len() > max_depth {
+                break;
+            }
             let line = text.byte_to_line(node.start_byte());
 
             // if parent of previous node is still on the same line, use the parent node
