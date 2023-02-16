@@ -1,4 +1,4 @@
-use helix_loader::{merge_toml_values, toml_names_in_dir, FlavorLoader};
+use helix_loader::{merge_toml_values, toml_names_in_dir};
 use log::warn;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
@@ -236,7 +236,7 @@ impl Loader {
         if name == "default" {
             return Ok(self.default(theme));
         }
-        let mut icons: Icons = self.load_flavor(name, name, false).map(Icons::from)?;
+        let mut icons: Icons = self.load_toml(name).map(Icons::from)?;
 
         // Remove all styles when there is no truecolor support.
         // Not classy, but less cumbersome than trying to pass a parameter to a deserializer.
@@ -251,6 +251,18 @@ impl Loader {
             name: name.into(),
             ..icons
         })
+    }
+
+    fn load_toml(&self, name: &str) -> anyhow::Result<Value> {
+        let toml_from_file_stem = |file_stem: &str| match file_stem {
+            "default" => Ok(DEFAULT_ICONS.clone()),
+            _ => helix_loader::toml_from_file_stem(file_stem, &[&self.user_dir, &self.default_dir]),
+        };
+        helix_loader::flatten_inheritable_toml(name, toml_from_file_stem, Self::merge_toml)
+    }
+
+    fn merge_toml(parent: Value, child: Value) -> Value {
+        merge_toml_values(parent, child, 3)
     }
 
     /// Lists all icons flavors names available in default and user directory
@@ -287,31 +299,5 @@ impl From<Value> for Icons {
             warn!("Expected icons TOML value to be a table, found {:?}", value);
             DEFAULT_ICONS_DATA.clone()
         }
-    }
-}
-
-impl FlavorLoader<Icons> for Loader {
-    fn user_dir(&self) -> &Path {
-        &self.user_dir
-    }
-
-    fn default_dir(&self) -> &Path {
-        &self.default_dir
-    }
-
-    fn log_type_display(&self) -> String {
-        "Icons".into()
-    }
-
-    fn merge_flavors(
-        &self,
-        parent_flavor_toml: toml::Value,
-        flavor_toml: toml::Value,
-    ) -> toml::Value {
-        merge_toml_values(parent_flavor_toml, flavor_toml, 3)
-    }
-
-    fn default_data(&self, name: &str) -> Option<Value> {
-        (name == "default").then(|| DEFAULT_ICONS.clone())
     }
 }

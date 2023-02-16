@@ -1,7 +1,7 @@
 pub mod config;
 pub mod grammar;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use etcetera::base_strategy::{choose_base_strategy, BaseStrategy};
 use std::path::{Path, PathBuf};
 use toml::Value;
@@ -181,84 +181,38 @@ pub fn merge_toml_values(left: toml::Value, right: toml::Value, merge_depth: usi
     }
 }
 
-/// This trait allows theme and icon flavors to be loaded from TOML files, with inheritance
-pub trait FlavorLoader<T> {
-    fn user_dir(&self) -> &Path;
-    fn default_dir(&self) -> &Path;
-    fn log_type_display(&self) -> String;
+/// Flatten a toml that might inherit some keys from another toml file.
+/// Used to handle the `inherits` key present in theme and icon files.
+pub fn flatten_inheritable_toml(
+    file_stem: &str,
+    toml_from_file_stem: impl Fn(&str) -> Result<toml::Value>,
+    merge_toml: fn(toml::Value, toml::Value) -> toml::Value,
+) -> Result<toml::Value> {
+    let toml_doc = toml_from_file_stem(file_stem)?;
 
-    // Returns the path to the flavor with the name
-    // With `only_default_dir` as false the path will first search for the user path
-    // disabled it ignores the user path and returns only the default path
-    fn path(&self, name: &str, only_default_dir: bool) -> PathBuf {
-        let filename = format!("{}.toml", name);
+    let inherits_from = match toml_doc.get("inherits") {
+        Some(inherits) if inherits.is_str() => inherits.as_str().unwrap(),
+        Some(invalid_value) => bail!("'inherits' must be a string: {invalid_value}"),
+        None => return Ok(toml_doc),
+    };
 
-        let user_path = self.user_dir().join(&filename);
-        if !only_default_dir && user_path.exists() {
-            user_path
-        } else {
-            self.default_dir().join(filename)
-        }
-    }
+    // Recursive inheritance is allowed; resolve as required
+    // TODO: Handle infinite recursion due to circular inherits (set recurse depth)
+    let parent_toml = flatten_inheritable_toml(inherits_from, toml_from_file_stem, merge_toml)?;
+    Ok(merge_toml(parent_toml, toml_doc))
+}
 
-    /// Loads the flavor data as `toml::Value` first from the `user_dir` then in `default_dir`
-    fn load_toml(&self, path: PathBuf) -> Result<Value> {
-        let data = std::fs::read_to_string(&path)?;
-
-        toml::from_str(&data).context("Failed to deserialize flavor")
-    }
-
-    /// Merge one theme into the parent theme
-    fn merge_flavors(&self, parent_flavor_toml: Value, flavor_toml: Value) -> Value;
-
-    /// Load the flavor and its parent recursively and merge them.
-    /// `base_flavor_name` is the flavor from the config.toml, used to prevent some circular loading scenarios.
-    fn load_flavor(
-        &self,
-        name: &str,
-        base_flavor_name: &str,
-        only_default_dir: bool,
-    ) -> Result<Value> {
-        let path = self.path(name, only_default_dir);
-        let flavor_toml = self.load_toml(path)?;
-
-        let inherits = flavor_toml.get("inherits");
-
-        let flavor_toml = if let Some(parent_flavor_name) = inherits {
-            let parent_flavor_name = parent_flavor_name.as_str().ok_or_else(|| {
-                anyhow!(
-                    "{}: expected 'inherits' to be a string: {}",
-                    self.log_type_display(),
-                    parent_flavor_name
-                )
-            })?;
-
-            let parent_flavor_toml = match self.default_data(parent_flavor_name) {
-                Some(p) => p,
-                None => self.load_flavor(
-                    parent_flavor_name,
-                    base_flavor_name,
-                    base_flavor_name == parent_flavor_name,
-                )?,
-            };
-
-            self.merge_flavors(parent_flavor_toml, flavor_toml)
-        } else {
-            flavor_toml
-        };
-
-        Ok(flavor_toml)
-    }
-
-    /// Lists all flavor names available in default and user directory
-    fn names(&self) -> Vec<String> {
-        let mut names = toml_names_in_dir(self.user_dir());
-        names.extend(toml_names_in_dir(self.default_dir()));
-        names
-    }
-
-    /// Get the data for the defaults
-    fn default_data(&self, name: &str) -> Option<Value>;
+/// Finds the path of a toml file by searching through a list of directories,
+/// loads the toml file and returns the value.
+pub fn toml_from_file_stem(file_stem: &str, dirs: &[&Path]) -> Result<toml::Value> {
+    let filename = format!("{file_stem}.toml");
+    let path = dirs
+        .iter()
+        .map(|dir| dir.join(&filename))
+        .find(|f| f.exists())
+        .ok_or_else(|| anyhow!("Could not find toml file {filename}"))?;
+    let toml_str = std::fs::read_to_string(path)?;
+    toml::from_str(&toml_str).context("Failed to deserialize flavor")
 }
 
 /// Get the names of the TOML documents within a directory
