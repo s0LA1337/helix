@@ -1150,6 +1150,13 @@ impl Editor {
 
     fn _refresh(&mut self) {
         let config = self.config();
+
+        if !config.lsp.display_inline_diagnostics {
+            for doc in self.documents_mut() {
+                doc.reset_diagnostics_annotations();
+            }
+        }
+
         for (view, _) in self.tree.views_mut() {
             let doc = doc_mut!(self, &view.doc);
             view.sync_changes(doc);
