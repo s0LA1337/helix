@@ -377,6 +377,9 @@ pub struct LspConfig {
     pub auto_signature_help: bool,
     /// Display docs under signature help popup
     pub display_signature_help_docs: bool,
+    /// Display diagnostic on the same line they occur automatically.
+    /// Also called "error lens"-style diagnostics, in reference to the popular VSCode extension.
+    pub display_inline_diagnostics: bool,
 }
 
 impl Default for LspConfig {
@@ -386,6 +389,7 @@ impl Default for LspConfig {
             display_messages: false,
             auto_signature_help: true,
             display_signature_help_docs: true,
+            display_inline_diagnostics: true,
         }
     }
 }
