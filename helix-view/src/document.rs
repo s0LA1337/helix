@@ -815,14 +815,16 @@ impl Document {
     fn apply_impl(&mut self, transaction: &Transaction, view_id: ViewId) -> bool {
         let old_doc = self.text().clone();
 
-        let success = transaction.changes().apply(&mut self.text);
+        let changes = transaction.changes();
+
+        let success = changes.apply(&mut self.text);
 
         if success {
             for selection in self.selections.values_mut() {
                 *selection = selection
                     .clone()
                     // Map through changes
-                    .map(transaction.changes())
+                    .map(changes)
                     // Ensure all selections across all views still adhere to invariants.
                     .ensure_invariants(self.text.slice(..));
             }
@@ -838,7 +840,7 @@ impl Document {
             self.modified_since_accessed = true;
         }
 
-        if !transaction.changes().is_empty() {
+        if !changes.is_empty() {
             self.version += 1;
             // start computing the diff in parallel
             if let Some(diff_handle) = &self.diff_handle {
@@ -856,14 +858,11 @@ impl Document {
             // update tree-sitter syntax tree
             if let Some(syntax) = &mut self.syntax {
                 // TODO: no unwrap
-                syntax
-                    .update(&old_doc, &self.text, transaction.changes())
-                    .unwrap();
+                syntax.update(&old_doc, &self.text, changes).unwrap();
             }
 
             // map state.diagnostics over changes::map_pos too
             for diagnostic in &mut self.diagnostics {
-                let changes = transaction.changes();
                 diagnostic.range.start = changes.map_pos(diagnostic.range.start, Assoc::After);
                 diagnostic.range.end = changes.map_pos(diagnostic.range.end, Assoc::After);
                 diagnostic.line = self.text.char_to_line(diagnostic.range.start);
@@ -877,7 +876,7 @@ impl Document {
                     self.versioned_identifier(),
                     &old_doc,
                     self.text(),
-                    transaction.changes(),
+                    changes,
                 );
 
                 if let Some(notify) = notify {
