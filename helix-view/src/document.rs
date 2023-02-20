@@ -6,7 +6,7 @@ use helix_core::auto_pairs::AutoPairs;
 use helix_core::doc_formatter::TextFormat;
 use helix_core::syntax::Highlight;
 use helix_core::text_annotations::TextAnnotations;
-use helix_core::Range;
+use helix_core::{Assoc, Range};
 use helix_vcs::{DiffHandle, DiffProviderRegistry};
 
 use serde::de::{self, Deserialize, Deserializer};
@@ -863,7 +863,6 @@ impl Document {
 
             // map state.diagnostics over changes::map_pos too
             for diagnostic in &mut self.diagnostics {
-                use helix_core::Assoc;
                 let changes = transaction.changes();
                 diagnostic.range.start = changes.map_pos(diagnostic.range.start, Assoc::After);
                 diagnostic.range.end = changes.map_pos(diagnostic.range.end, Assoc::After);
