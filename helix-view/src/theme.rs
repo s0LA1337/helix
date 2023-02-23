@@ -91,7 +91,7 @@ impl Loader {
             _ => helix_loader::toml_from_file_stem(file_stem, &[&self.user_dir, &self.default_dir]),
         };
 
-        helix_loader::flatten_inheritable_toml(name, toml_from_file_stem, Self::merge_toml)
+        helix_loader::flatten_inheritable_toml(name, toml_from_file_stem, Self::merge_toml, 3)
     }
 
     fn merge_toml(parent: Value, child: Value) -> Value {

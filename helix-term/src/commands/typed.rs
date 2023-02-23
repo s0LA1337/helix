@@ -823,7 +823,7 @@ fn icons(
                 .editor
                 .icons_loader
                 .load(flavor_name, &cx.editor.theme, true_color)
-                .with_context(|| "Icons flavor does not exist")?;
+                .map_err(|err| anyhow!("Could not load icon flavor: {}", err))?;
             cx.editor.set_icons(icons);
         } else {
             let name = cx.editor.icons.name().to_string();

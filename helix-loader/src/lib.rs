@@ -187,6 +187,7 @@ pub fn flatten_inheritable_toml(
     file_stem: &str,
     toml_from_file_stem: impl Fn(&str) -> Result<toml::Value>,
     merge_toml: fn(toml::Value, toml::Value) -> toml::Value,
+    merge_depth: usize,
 ) -> Result<toml::Value> {
     let toml_doc = toml_from_file_stem(file_stem)?;
 
@@ -196,10 +197,18 @@ pub fn flatten_inheritable_toml(
         None => return Ok(toml_doc),
     };
 
-    // Recursive inheritance is allowed; resolve as required
-    // TODO: Handle infinite recursion due to circular inherits (set recurse depth)
-    let parent_toml = flatten_inheritable_toml(inherits_from, toml_from_file_stem, merge_toml)?;
-    Ok(merge_toml(parent_toml, toml_doc))
+    if merge_depth > 0 {
+        // Recursive inheritance is allowed; resolve as required
+        let parent_toml = flatten_inheritable_toml(
+            inherits_from,
+            toml_from_file_stem,
+            merge_toml,
+            merge_depth - 1,
+        )?;
+        Ok(merge_toml(parent_toml, toml_doc))
+    } else {
+        bail!("TOML inheritance has reached maximum depth (you may have a cyclic inherit)");
+    }
 }
 
 /// Finds the path of a toml file by searching through a list of directories,
