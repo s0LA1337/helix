@@ -279,6 +279,8 @@ pub struct Config {
     pub soft_wrap: SoftWrap,
     /// Whether to render rainbow highlights. Defaults to `false`.
     pub rainbow_brackets: bool,
+    /// Draw border around popups.
+    pub popup_border: PopupBorderConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -758,6 +760,15 @@ impl Default for IndentGuidesConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PopupBorderConfig {
+    None,
+    All,
+    Popup,
+    Menu,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -796,6 +807,7 @@ impl Default for Config {
             soft_wrap: SoftWrap::default(),
             rainbow_brackets: false,
             completion_replace: false,
+            popup_border: PopupBorderConfig::None,
         }
     }
 }

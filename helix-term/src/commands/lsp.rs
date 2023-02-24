@@ -15,12 +15,12 @@ use tui::{
 
 use super::{align_view, push_jump, Align, Context, Editor, Open};
 
-use helix_core::{path, text_annotations::InlineAnnotation, Selection};
+use helix_core::{path, Selection};
 use helix_view::{
-    document::{DocumentInlayHints, DocumentInlayHintsId, Mode},
-    editor::Action,
+    document::Mode,
+    editor::{Action, PopupBorderConfig},
+    graphics::Margin,
     theme::Style,
-    Document, View,
 };
 
 use crate::{
@@ -669,7 +669,20 @@ pub fn code_action(cx: &mut Context) {
             });
             picker.move_down(); // pre-select the first item
 
-            let popup = Popup::new("code-action", picker).with_scrollbar(false);
+            let border_config = &editor.config().popup_border;
+
+            let margin = if border_config == &PopupBorderConfig::All
+                || border_config == &PopupBorderConfig::Menu
+            {
+                Margin::vertical(1)
+            } else {
+                Margin::none()
+            };
+
+            let popup = Popup::new("code-action", picker)
+                .with_scrollbar(false)
+                .margin(margin);
+
             compositor.replace_or_push("code-action", popup);
         },
     )

@@ -278,6 +278,21 @@ impl Completion {
         let popup = Popup::new(Self::ID, menu)
             .with_scrollbar(false)
             .ignore_escape_key(true);
+
+        let border_config = &editor.config().popup_border;
+
+        let margin = if border_config == &PopupBorderConfig::All
+            || border_config == &PopupBorderConfig::Menu
+        {
+            Margin::vertical(1)
+        } else {
+            Margin::none()
+        };
+
+        let popup = Popup::new(Self::ID, menu)
+            .with_scrollbar(false)
+            .margin(margin);
+
         let mut completion = Self {
             popup,
             start_offset,
@@ -509,5 +524,19 @@ impl Component for Completion {
         let background = cx.editor.theme.get("ui.popup");
         surface.clear_with(doc_area, background);
         markdown_doc.render(doc_area, surface, cx);
+            // clear area
+            let background = cx.editor.theme.get("ui.popup");
+            surface.clear_with(area, background);
+
+            let border_config = &cx.editor.config().popup_border;
+
+            if border_config == &PopupBorderConfig::All
+                || border_config == &PopupBorderConfig::Popup
+            {
+                use tui::widgets::{Block, Borders, Widget};
+                Widget::render(Block::default().borders(Borders::ALL), area, surface);
+            }
+            markdown_doc.render(area, surface, cx);
+        }
     }
 }
