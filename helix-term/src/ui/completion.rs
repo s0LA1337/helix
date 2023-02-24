@@ -8,7 +8,7 @@ use tui::{buffer::Buffer as Surface, text::Span};
 
 use std::borrow::Cow;
 
-use helix_core::{Change, Transaction};
+use helix_core::{chars, Change, Transaction};
 use helix_view::{graphics::Rect, Document, Editor};
 
 use crate::commands;
@@ -106,6 +106,7 @@ impl Completion {
         start_offset: usize,
         trigger_offset: usize,
     ) -> Self {
+        let replace_mode = editor.config().completion_replace;
         // Sort completion items according to their preselect status (given by the LSP server)
         items.sort_by_key(|item| !item.preselect.unwrap_or(false));
 
@@ -118,13 +119,18 @@ impl Completion {
                 offset_encoding: helix_lsp::OffsetEncoding,
                 start_offset: usize,
                 trigger_offset: usize,
+                replace_mode: bool,
             ) -> Transaction {
                 let transaction = if let Some(edit) = &item.text_edit {
                     let edit = match edit {
                         lsp::CompletionTextEdit::Edit(edit) => edit.clone(),
                         lsp::CompletionTextEdit::InsertAndReplace(item) => {
-                            // TODO: support using "insert" instead of "replace" via user config
-                            lsp::TextEdit::new(item.replace, item.new_text.clone())
+                            let range = if replace_mode {
+                                item.replace
+                            } else {
+                                item.insert
+                            };
+                            lsp::TextEdit::new(range, item.new_text.clone())
                         }
                     };
 
@@ -136,27 +142,44 @@ impl Completion {
                     )
                 } else {
                     let text = item.insert_text.as_ref().unwrap_or(&item.label);
-                    // Some LSPs just give you an insertText with no offset ¯\_(ツ)_/¯
-                    // in these cases we need to check for a common prefix and remove it
-                    let prefix = Cow::from(doc.text().slice(start_offset..trigger_offset));
-                    let text = text.trim_start_matches::<&str>(&prefix);
+                    let doc_text = doc.text().slice(..);
+                    let primary_cursor = doc.selection(view_id).primary().cursor(doc_text);
 
-                    // TODO: this needs to be true for the numbers to work out correctly
-                    // in the closure below. It's passed in to a callback as this same
+                    // TODO: this needs to be true for the closure below to work out
+                    // It's passed in to a callback as this same
                     // formula, but can the value change between the LSP request and
                     // response? If it does, can we recover?
-                    debug_assert!(
-                        doc.selection(view_id)
-                            .primary()
-                            .cursor(doc.text().slice(..))
-                            == trigger_offset
-                    );
+                    debug_assert!(primary_cursor == trigger_offset);
+                    let start_offset = primary_cursor - start_offset;
 
-                    Transaction::change_by_selection(doc.text(), doc.selection(view_id), |range| {
-                        let cursor = range.cursor(doc.text().slice(..));
+                    Transaction::change_by_selection_ignore_overlapping(
+                        doc.text(),
+                        doc.selection(view_id),
+                        |range| {
+                            let cursor = range.cursor(doc_text);
+                            // if inserting a completion at this cursor would go out of bounds
+                            // return a trivial edit
+                            if cursor < start_offset {
+                                return (0, 0, None);
+                            }
+                            let end_offset = if replace_mode {
+                                // in replace mode replace the rest of the word
+                                doc_text
+                                    .chars_at(primary_cursor)
+                                    .take_while(|ch| chars::char_is_word(*ch))
+                                    .count()
+                            } else {
+                                // otherwise only replace up to the current edit
+                                0
+                            };
 
-                        (cursor, cursor, Some(text.into()))
-                    })
+                            (
+                                cursor - start_offset,
+                                cursor + end_offset,
+                                Some(text.into()),
+                            )
+                        },
+                    )
                 };
 
                 transaction
@@ -190,6 +213,7 @@ impl Completion {
                         offset_encoding,
                         start_offset,
                         trigger_offset,
+                        replace_mode,
                     );
 
                     // initialize a savepoint
@@ -212,6 +236,7 @@ impl Completion {
                         offset_encoding,
                         start_offset,
                         trigger_offset,
+                        replace_mode,
                     );
 
                     doc.apply(&transaction, view.id);
