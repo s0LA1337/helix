@@ -278,9 +278,10 @@ These scopes are used for theming the editor interface.
 | `ui.text.focus`             |                                                                                                |
 | `ui.text.inactive`          | Same as `ui.text` but when the text is inactive (e.g. suggestions)                             |
 | `ui.text.info`              | The key: command text in `ui.popup.info` boxes                                                 |
+| `ui.virtual.diagnostics`    | Default style for inline diagnostics lines (notably control the background)                    |
+| `ui.virtual.indent-guide`   | Vertical indent width guides                                                                   |
 | `ui.virtual.ruler`          | Ruler columns (see the [`editor.rulers` config][editor-section])                               |
 | `ui.virtual.whitespace`     | Visible whitespace characters                                                                  |
-| `ui.virtual.indent-guide`   | Vertical indent width guides                                                                   |
 | `ui.virtual.wrap`           | Soft-wrap indicator (see the [`editor.soft-wrap` config][editor-section])                      |
 | `ui.menu`                   | Code and command completion menus                                                              |
 | `ui.menu.selected`          | Selected autocomplete item                                                                     |
