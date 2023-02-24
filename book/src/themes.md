@@ -303,15 +303,16 @@ These scopes are used for theming the editor interface.
 | `ui.cursorline.secondary`   | The lines of any other cursors ([if cursorline is enabled][editor-section])                    |
 | `ui.cursorcolumn.primary`   | The column of the primary cursor ([if cursorcolumn is enabled][editor-section])                |
 | `ui.cursorcolumn.secondary` | The columns of any other cursors ([if cursorcolumn is enabled][editor-section])                |
-| `warning`                   | Diagnostics warning (gutter)                                                                   |
-| `error`                     | Diagnostics error (gutter)                                                                     |
-| `info`                      | Diagnostics info (gutter)                                                                      |
-| `hint`                      | Diagnostics hint (gutter)                                                                      |
+| `warning`                   | Diagnostics warning icon                                                                       |
+| `error`                     | Diagnostics error icon                                                                         |
+| `info`                      | Diagnostics info icon                                                                          |
+| `hint`                      | Diagnostics hint icon                                                                          |
 | `diagnostic`                | Diagnostics fallback style (editing area)                                                      |
 | `diagnostic.hint`           | Diagnostics hint (editing area)                                                                |
 | `diagnostic.info`           | Diagnostics info (editing area)                                                                |
 | `diagnostic.warning`        | Diagnostics warning (editing area)                                                             |
 | `diagnostic.error`          | Diagnostics error (editing area)                                                               |
+| `symbolkind`                | Symbol kind icons (symbol picker)                                                              |
 
 You can check compliance to spec with
 

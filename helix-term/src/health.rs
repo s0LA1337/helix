@@ -63,6 +63,7 @@ pub fn general() -> std::io::Result<()> {
     let log_file = helix_loader::log_file();
     let rt_dir = helix_loader::runtime_dir();
     let clipboard_provider = get_clipboard_provider();
+    let icons_file = helix_loader::icons_config_file();
 
     if config_file.exists() {
         writeln!(stdout, "Config file: {}", config_file.display())?;
@@ -73,6 +74,11 @@ pub fn general() -> std::io::Result<()> {
         writeln!(stdout, "Language file: {}", lang_file.display())?;
     } else {
         writeln!(stdout, "Language file: default")?;
+    }
+    if icons_file.exists() {
+        writeln!(stdout, "Icons file: {}", icons_file.display())?;
+    } else {
+        writeln!(stdout, "Icons file: default")?;
     }
     writeln!(stdout, "Log file: {}", log_file.display())?;
     writeln!(stdout, "Runtime directory: {}", rt_dir.display())?;

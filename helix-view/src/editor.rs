@@ -3,6 +3,7 @@ use crate::{
     clipboard::{get_clipboard_provider, ClipboardProvider},
     document::{DocumentSavedEventFuture, DocumentSavedEventResult, Mode},
     graphics::{CursorKind, Rect},
+    icons::{self, Icons},
     info::Info,
     input::KeyEvent,
     theme::{self, Theme},
@@ -212,6 +213,27 @@ impl Default for FilePickerConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
+pub struct IconsConfig {
+    /// Enables icons in front of buffer names in bufferline. Defaults to `true`
+    pub bufferline: bool,
+    /// Enables icons in front of items in the picker. Defaults to `true`
+    pub picker: bool,
+    /// Enables icons in front of items in the statusline. Defaults to `true`
+    pub statusline: bool,
+}
+
+impl Default for IconsConfig {
+    fn default() -> Self {
+        Self {
+            bufferline: true,
+            picker: true,
+            statusline: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 pub struct Config {
     /// Padding to keep between the edge of the screen and the cursor when scrolling. Defaults to 5.
     pub scrolloff: usize,
@@ -276,6 +298,8 @@ pub struct Config {
     pub indent_guides: IndentGuidesConfig,
     /// Whether to color modes with different colors. Defaults to `false`.
     pub color_modes: bool,
+    /// Icons configuration
+    pub icons: IconsConfig,
     pub soft_wrap: SoftWrap,
     /// Whether to render rainbow highlights. Defaults to `false`.
     pub rainbow_brackets: bool,
@@ -486,6 +510,9 @@ pub enum StatusLineElement {
 
     /// The file type (language ID or "text")
     FileType,
+
+    /// The file type icon (from file path)
+    FileTypeIcon,
 
     /// A summary of the number of errors and warnings
     Diagnostics,
@@ -793,6 +820,7 @@ impl Default for Config {
             completion_trigger_len: 2,
             auto_info: true,
             file_picker: FilePickerConfig::default(),
+            icons: IconsConfig::default(),
             statusline: StatusLineConfig::default(),
             cursor_shape: CursorShapeConfig::default(),
             true_color: false,
@@ -866,6 +894,7 @@ pub struct Editor {
     pub registers: Registers,
     pub macro_recording: Option<(char, Vec<KeyEvent>)>,
     pub macro_replaying: Vec<char>,
+    pub icons: Icons,
     pub language_servers: helix_lsp::Registry,
     pub diagnostics: BTreeMap<lsp::Url, Vec<lsp::Diagnostic>>,
     pub diff_providers: DiffProviderRegistry,
@@ -885,6 +914,8 @@ pub struct Editor {
     /// is set here.
     pub theme: Theme,
     pub last_line_number: Option<usize>,
+    pub icons_loader: Arc<icons::Loader>,
+
     pub status_msg: Option<(Cow<'static, str>, Severity)>,
     pub autoinfo: Option<Info>,
 
@@ -969,11 +1000,14 @@ impl Editor {
     pub fn new(
         mut area: Rect,
         theme_loader: Arc<theme::Loader>,
+        icons_loader: Arc<icons::Loader>,
         syn_loader: Arc<syntax::Loader>,
         config: Arc<dyn DynAccess<Config>>,
     ) -> Self {
         let conf = config.load();
         let auto_pairs = (&conf.auto_pairs).into();
+        let theme = theme_loader.default();
+        let icons = icons_loader.default(&theme);
 
         // HAXX: offset the render area height by 1 to account for prompt/commandline
         area.height -= 1;
@@ -990,10 +1024,11 @@ impl Editor {
             selected_register: None,
             macro_recording: None,
             macro_replaying: Vec::new(),
-            theme: theme_loader.default(),
+            theme,
             language_servers: helix_lsp::Registry::new(),
             diagnostics: BTreeMap::new(),
             diff_providers: DiffProviderRegistry::default(),
+            icons,
             debugger: None,
             debugger_events: SelectAll::new(),
             breakpoints: HashMap::new(),
@@ -1001,6 +1036,7 @@ impl Editor {
             theme_loader,
             last_theme: None,
             last_line_number: None,
+            icons_loader,
             registers: Registers::default(),
             clipboard_provider: get_clipboard_provider(),
             status_msg: None,
@@ -1114,10 +1150,18 @@ impl Editor {
             }
             ThemeAction::Set => {
                 self.last_theme = None;
+                // Reload the icons to apply default colors based on theme
+                self.icons.set_diagnostic_icons_base_style(&theme);
+                self.icons.set_symbolkind_icons_base_style(&theme);
                 self.theme = theme;
             }
         }
 
+        self._refresh();
+    }
+
+    pub fn set_icons(&mut self, icons: Icons) {
+        self.icons = icons;
         self._refresh();
     }
 

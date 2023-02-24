@@ -31,6 +31,7 @@ use helix_core::{
 use helix_view::{
     editor::Action,
     graphics::{CursorKind, Margin, Modifier, Rect},
+    icons::Icons,
     theme::Style,
     view::ViewPosition,
     Document, DocumentId, Editor,
@@ -126,11 +127,12 @@ impl<T: Item> FilePicker<T> {
     pub fn new(
         options: Vec<T>,
         editor_data: T::Data,
+        icons: Option<&'_ Icons>,
         callback_fn: impl Fn(&mut Context, &T, Action) + 'static,
         preview_fn: impl Fn(&Editor, &T) -> Option<FileLocation> + 'static,
     ) -> Self {
         let truncate_start = true;
-        let mut picker = Picker::new(options, editor_data, callback_fn);
+        let mut picker = Picker::new(options, editor_data, icons, callback_fn);
         picker.truncate_start = truncate_start;
 
         Self {
@@ -430,6 +432,7 @@ impl<T: Item> Picker<T> {
     pub fn new(
         options: Vec<T>,
         editor_data: T::Data,
+        icons: Option<&'_ Icons>,
         callback_fn: impl Fn(&mut Context, &T, Action) + 'static,
     ) -> Self {
         let prompt = Prompt::new(
@@ -441,10 +444,10 @@ impl<T: Item> Picker<T> {
 
         let n = options
             .first()
-            .map(|option| option.format(&editor_data).cells.len())
+            .map(|option| option.format(&editor_data, icons).cells.len())
             .unwrap_or_default();
         let max_lens = options.iter().fold(vec![0; n], |mut acc, option| {
-            let row = option.format(&editor_data);
+            let row = option.format(&editor_data, icons);
             // maintain max for each column
             for (acc, cell) in acc.iter_mut().zip(row.cells.iter()) {
                 let width = cell.content.width();
@@ -765,7 +768,12 @@ impl<T: Item + 'static> Component for Picker<T> {
             .skip(offset)
             .take(rows as usize)
             .map(|pmatch| &self.options[pmatch.index])
-            .map(|option| option.format(&self.editor_data))
+            .map(|option| {
+                option.format(
+                    &self.editor_data,
+                    cx.editor.config().icons.picker.then(|| &cx.editor.icons),
+                )
+            })
             .map(|mut row| {
                 const TEMP_CELL_SEP: &str = " ";
 

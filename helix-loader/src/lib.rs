@@ -1,8 +1,10 @@
 pub mod config;
 pub mod grammar;
 
+use anyhow::{anyhow, bail, Context, Result};
 use etcetera::base_strategy::{choose_base_strategy, BaseStrategy};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use toml::Value;
 
 pub const VERSION_AND_GIT_HASH: &str = env!("VERSION_AND_GIT_HASH");
 
@@ -92,6 +94,10 @@ pub fn log_file() -> PathBuf {
     cache_dir().join("helix.log")
 }
 
+pub fn icons_config_file() -> std::path::PathBuf {
+    config_dir().join("icons.toml")
+}
+
 pub fn find_local_config_dirs() -> Vec<PathBuf> {
     let current_dir = std::env::current_dir().expect("unable to determine current directory");
     let mut directories = Vec::new();
@@ -122,8 +128,6 @@ pub fn find_local_config_dirs() -> Vec<PathBuf> {
 /// where one usually wants to override or add to the array instead of
 /// replacing it altogether.
 pub fn merge_toml_values(left: toml::Value, right: toml::Value, merge_depth: usize) -> toml::Value {
-    use toml::Value;
-
     fn get_name(v: &Value) -> Option<&str> {
         v.get("name").and_then(Value::as_str)
     }
@@ -175,6 +179,68 @@ pub fn merge_toml_values(left: toml::Value, right: toml::Value, merge_depth: usi
         // Catch everything else we didn't handle, and use the right value
         (_, value) => value,
     }
+}
+
+/// Flatten a toml that might inherit some keys from another toml file.
+/// Used to handle the `inherits` key present in theme and icon files.
+pub fn flatten_inheritable_toml(
+    file_stem: &str,
+    toml_from_file_stem: impl Fn(&str) -> Result<toml::Value>,
+    merge_toml: fn(toml::Value, toml::Value) -> toml::Value,
+    merge_depth: usize,
+) -> Result<toml::Value> {
+    let toml_doc = toml_from_file_stem(file_stem)?;
+
+    let inherits_from = match toml_doc.get("inherits") {
+        Some(inherits) if inherits.is_str() => inherits.as_str().unwrap(),
+        Some(invalid_value) => bail!("'inherits' must be a string: {invalid_value}"),
+        None => return Ok(toml_doc),
+    };
+
+    if merge_depth > 0 {
+        // Recursive inheritance is allowed; resolve as required
+        let parent_toml = flatten_inheritable_toml(
+            inherits_from,
+            toml_from_file_stem,
+            merge_toml,
+            merge_depth - 1,
+        )?;
+        Ok(merge_toml(parent_toml, toml_doc))
+    } else {
+        bail!("TOML inheritance has reached maximum depth (you may have a cyclic inherit)");
+    }
+}
+
+/// Finds the path of a toml file by searching through a list of directories,
+/// loads the toml file and returns the value.
+pub fn toml_from_file_stem(file_stem: &str, dirs: &[&Path]) -> Result<toml::Value> {
+    let filename = format!("{file_stem}.toml");
+    let path = dirs
+        .iter()
+        .map(|dir| dir.join(&filename))
+        .find(|f| f.exists())
+        .ok_or_else(|| anyhow!("Could not find toml file {filename}"))?;
+    let toml_str = std::fs::read_to_string(path)?;
+    toml::from_str(&toml_str).context("Failed to deserialize flavor")
+}
+
+/// Get the names of the TOML documents within a directory
+pub fn toml_names_in_dir(path: &Path) -> Vec<String> {
+    let entries = match std::fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    entries
+        .filter_map(|entry| {
+            entry
+                .ok()?
+                .file_name()
+                .to_str()?
+                .strip_suffix(".toml")
+                .filter(|name| !name.is_empty())
+                .map(ToString::to_string)
+        })
+        .collect()
 }
 
 #[cfg(test)]
