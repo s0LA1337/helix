@@ -1,4 +1,5 @@
 use std::{borrow::Cow, path::PathBuf};
+use tui::text::Span;
 
 use crate::{
     compositor::{Callback, Component, Compositor, Context, Event, EventResult},
@@ -8,19 +9,14 @@ use tui::{
     buffer::Buffer as Surface,
     widgets::{Block, Borders, Table, Widget},
 };
-use tui::{buffer::Buffer as Surface, text::Span, widgets::Table};
 
 pub use tui::widgets::{Cell, Row};
 
 use fuzzy_matcher::skim::SkimMatcherV2 as Matcher;
 use fuzzy_matcher::FuzzyMatcher;
 
-use helix_view::{
-    editor::PopupBorderConfig,
-    graphics::{Margin, Rect},
-    Editor,
-};
-use helix_view::{graphics::Rect, icons::Icons, Editor};
+use helix_view::{editor::PopupBorderConfig, graphics::Margin, icons::Icons};
+use helix_view::{graphics::Rect, Editor};
 use tui::layout::Constraint;
 
 pub trait Item {

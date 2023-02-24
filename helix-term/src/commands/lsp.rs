@@ -17,6 +17,7 @@ use helix_view::{
     document::{DocumentInlayHints, DocumentInlayHintsId, Mode},
     editor::{Action, PopupBorderConfig},
     graphics::Margin,
+    icons::{self, Icon, Icons},
     theme::Style,
     Document, View,
 };
@@ -144,6 +145,16 @@ impl ui::menu::Item for lsp::SymbolInformation {
                 Row::from(symbol_span)
             }
         }
+    }
+
+    fn sort_text(&self, data: &Self::Data) -> Cow<str> {
+        let label: String = self.format(data, None).cell_text().collect();
+        label.into()
+    }
+
+    fn filter_text(&self, data: &Self::Data) -> Cow<str> {
+        let label: String = self.format(data, None).cell_text().collect();
+        label.into()
     }
 }
 

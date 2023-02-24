@@ -2,7 +2,6 @@ use crate::compositor::{Component, Context, Event, EventResult};
 use helix_view::{
     editor::{CompleteAction, PopupBorderConfig},
     graphics::Margin,
-    editor::CompleteAction,
     icons::Icons,
     theme::{Modifier, Style},
     ViewId,
