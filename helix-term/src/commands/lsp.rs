@@ -15,12 +15,13 @@ use tui::{
 
 use super::{align_view, push_jump, Align, Context, Editor, Open};
 
-use helix_core::{path, Selection};
+use helix_core::{path, text_annotations::InlineAnnotation, Selection};
 use helix_view::{
-    document::Mode,
+    document::{DocumentInlayHints, DocumentInlayHintsId, Mode},
     editor::{Action, PopupBorderConfig},
     graphics::Margin,
     theme::Style,
+    Document, View,
 };
 
 use crate::{

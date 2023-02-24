@@ -1,6 +1,7 @@
 use crate::compositor::{Component, Context, Event, EventResult};
 use helix_view::{
-    editor::CompleteAction,
+    editor::{CompleteAction, PopupBorderConfig},
+    graphics::Margin,
     theme::{Modifier, Style},
     ViewId,
 };
@@ -275,9 +276,6 @@ impl Completion {
                 }
             };
         });
-        let popup = Popup::new(Self::ID, menu)
-            .with_scrollbar(false)
-            .ignore_escape_key(true);
 
         let border_config = &editor.config().popup_border;
 
@@ -291,7 +289,9 @@ impl Completion {
 
         let popup = Popup::new(Self::ID, menu)
             .with_scrollbar(false)
-            .margin(margin);
+            .margin(margin)
+            .with_scrollbar(false)
+            .ignore_escape_key(true);
 
         let mut completion = Self {
             popup,
@@ -524,19 +524,16 @@ impl Component for Completion {
         let background = cx.editor.theme.get("ui.popup");
         surface.clear_with(doc_area, background);
         markdown_doc.render(doc_area, surface, cx);
-            // clear area
-            let background = cx.editor.theme.get("ui.popup");
-            surface.clear_with(area, background);
+        // clear area
+        let background = cx.editor.theme.get("ui.popup");
+        surface.clear_with(area, background);
 
-            let border_config = &cx.editor.config().popup_border;
+        let border_config = &cx.editor.config().popup_border;
 
-            if border_config == &PopupBorderConfig::All
-                || border_config == &PopupBorderConfig::Popup
-            {
-                use tui::widgets::{Block, Borders, Widget};
-                Widget::render(Block::default().borders(Borders::ALL), area, surface);
-            }
-            markdown_doc.render(area, surface, cx);
+        if border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Popup {
+            use tui::widgets::{Block, Borders, Widget};
+            Widget::render(Block::default().borders(Borders::ALL), area, surface);
         }
+        markdown_doc.render(area, surface, cx);
     }
 }
