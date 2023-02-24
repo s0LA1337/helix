@@ -6,7 +6,7 @@ use helix_core::auto_pairs::AutoPairs;
 use helix_core::doc_formatter::TextFormat;
 use helix_core::syntax::Highlight;
 use helix_core::text_annotations::TextAnnotations;
-use helix_core::Range;
+use helix_core::{Assoc, Range};
 use helix_vcs::{DiffHandle, DiffProviderRegistry};
 
 use serde::de::{self, Deserialize, Deserializer};
@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -33,6 +34,8 @@ use helix_core::{
 
 use crate::editor::{Config, RedrawHandle};
 use crate::{DocumentId, Editor, Theme, View, ViewId};
+
+pub mod annotations;
 
 /// 8kB of buffer space for encoding and decoding `Rope`s.
 const BUF_SIZE: usize = 8192;
@@ -147,6 +150,7 @@ pub struct Document {
     pub(crate) modified_since_accessed: bool,
 
     diagnostics: Vec<Diagnostic>,
+    diagnostic_annotations: annotations::DiagnosticAnnotations,
     language_server: Option<Arc<helix_lsp::Client>>,
 
     diff_handle: Option<DiffHandle>,
@@ -172,6 +176,7 @@ impl fmt::Debug for Document {
             .field("version", &self.version)
             .field("modified_since_accessed", &self.modified_since_accessed)
             .field("diagnostics", &self.diagnostics)
+            // .field("diagnostics_annotations", &self.diagnostics_annotations)
             // .field("language_server", &self.language_server)
             .finish()
     }
@@ -387,6 +392,7 @@ impl Document {
             changes,
             old_state,
             diagnostics: Vec::new(),
+            diagnostic_annotations: Default::default(),
             version: 0,
             history: Cell::new(History::default()),
             savepoint: None,
@@ -815,14 +821,16 @@ impl Document {
     fn apply_impl(&mut self, transaction: &Transaction, view_id: ViewId) -> bool {
         let old_doc = self.text().clone();
 
-        let success = transaction.changes().apply(&mut self.text);
+        let changes = transaction.changes();
+
+        let success = changes.apply(&mut self.text);
 
         if success {
             for selection in self.selections.values_mut() {
                 *selection = selection
                     .clone()
                     // Map through changes
-                    .map(transaction.changes())
+                    .map(changes)
                     // Ensure all selections across all views still adhere to invariants.
                     .ensure_invariants(self.text.slice(..));
             }
@@ -838,7 +846,7 @@ impl Document {
             self.modified_since_accessed = true;
         }
 
-        if !transaction.changes().is_empty() {
+        if !changes.is_empty() {
             self.version += 1;
             // start computing the diff in parallel
             if let Some(diff_handle) = &self.diff_handle {
@@ -856,15 +864,11 @@ impl Document {
             // update tree-sitter syntax tree
             if let Some(syntax) = &mut self.syntax {
                 // TODO: no unwrap
-                syntax
-                    .update(&old_doc, &self.text, transaction.changes())
-                    .unwrap();
+                syntax.update(&old_doc, &self.text, changes).unwrap();
             }
 
             // map state.diagnostics over changes::map_pos too
             for diagnostic in &mut self.diagnostics {
-                use helix_core::Assoc;
-                let changes = transaction.changes();
                 diagnostic.range.start = changes.map_pos(diagnostic.range.start, Assoc::After);
                 diagnostic.range.end = changes.map_pos(diagnostic.range.end, Assoc::After);
                 diagnostic.line = self.text.char_to_line(diagnostic.range.start);
@@ -872,13 +876,15 @@ impl Document {
             self.diagnostics
                 .sort_unstable_by_key(|diagnostic| diagnostic.range);
 
+            annotations::apply_changes_to_diagnostic_annotations(self, changes);
+
             // emit lsp notification
             if let Some(language_server) = self.language_server() {
                 let notify = language_server.text_document_did_change(
                     self.versioned_identifier(),
                     &old_doc,
                     self.text(),
-                    transaction.changes(),
+                    changes,
                 );
 
                 if let Some(notify) = notify {
@@ -1215,6 +1221,21 @@ impl Document {
             .sort_unstable_by_key(|diagnostic| diagnostic.range);
     }
 
+    #[inline]
+    pub fn diagnostic_annotations_messages(
+        &self,
+    ) -> Rc<[annotations::DiagnosticAnnotationMessage]> {
+        Rc::clone(&self.diagnostic_annotations.messages)
+    }
+
+    #[inline]
+    pub fn set_diagnostics_annotations(
+        &mut self,
+        diagnostic_annotations: annotations::DiagnosticAnnotations,
+    ) {
+        self.diagnostic_annotations = diagnostic_annotations;
+    }
+
     /// Get the document's auto pairs. If the document has a recognized
     /// language config with auto pairs configured, returns that;
     /// otherwise, falls back to the global auto pairs config. If the global
@@ -1263,7 +1284,18 @@ impl Document {
     }
 
     pub fn text_annotations(&self, _theme: Option<&Theme>) -> TextAnnotations {
-        TextAnnotations::default()
+        let mut text_annotations = TextAnnotations::default();
+
+        if !self.diagnostic_annotations.annotations.is_empty() {
+            text_annotations
+                .add_line_annotation(Rc::clone(&self.diagnostic_annotations.annotations));
+        }
+
+        text_annotations
+    }
+
+    pub fn reset_diagnostics_annotations(&mut self) {
+        self.diagnostic_annotations = Default::default();
     }
 }
 

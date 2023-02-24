@@ -11,6 +11,7 @@ use crate::{
 };
 
 use helix_core::{
+    diagnostic::Severity,
     graphemes::{
         ensure_grapheme_boundary_next_byte, next_grapheme_boundary, prev_grapheme_boundary,
     },
@@ -34,6 +35,8 @@ use tui::buffer::Buffer as Surface;
 
 use super::statusline;
 use super::{document::LineDecoration, lsp::SignatureHelp};
+
+mod diagnostics_annotations;
 
 pub struct EditorView {
     pub keymaps: Keymaps,
@@ -123,6 +126,16 @@ impl EditorView {
 
                 line_decorations.push(Box::new(line_decoration));
             }
+        }
+
+        if config.lsp.display_inline_diagnostics {
+            line_decorations.push(diagnostics_annotations::inline_diagnostics_decorator(
+                doc,
+                view,
+                inner,
+                theme,
+                &text_annotations,
+            ));
         }
 
         if is_focused && config.cursorline {
@@ -232,7 +245,11 @@ impl EditorView {
             }
         }
 
-        Self::render_diagnostics(doc, view, inner, surface, theme);
+        // If inline diagnostics are already displayed, we don't need to add the diagnostics in the
+        // top right corner, they would be redundant
+        if !config.lsp.display_inline_diagnostics {
+            Self::render_diagnostics(doc, view, inner, surface, theme);
+        }
 
         let statusline_area = view
             .area
@@ -397,7 +414,6 @@ impl EditorView {
         doc: &Document,
         theme: &Theme,
     ) -> [Vec<(usize, std::ops::Range<usize>)>; 5] {
-        use helix_core::diagnostic::Severity;
         let get_scope_of = |scope| {
             theme
             .find_scope_index_exact(scope)
@@ -701,7 +717,6 @@ impl EditorView {
         surface: &mut Surface,
         theme: &Theme,
     ) {
-        use helix_core::diagnostic::Severity;
         use tui::{
             layout::Alignment,
             text::Text,
@@ -733,7 +748,7 @@ impl EditorView {
                     Some(Severity::Info) => info,
                     Some(Severity::Hint) => hint,
                 });
-            let text = Text::styled(&diagnostic.message, style);
+            let text = Text::styled(&*diagnostic.message, style);
             lines.extend(text.lines);
         }
 
@@ -1426,7 +1441,6 @@ impl Component for EditorView {
         // render status msg
         if let Some((status_msg, severity)) = &cx.editor.status_msg {
             status_msg_width = status_msg.width();
-            use helix_view::editor::Severity;
             let style = if *severity == Severity::Error {
                 cx.editor.theme.get("error")
             } else {

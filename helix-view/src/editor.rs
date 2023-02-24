@@ -379,6 +379,9 @@ pub struct LspConfig {
     pub auto_signature_help: bool,
     /// Display docs under signature help popup
     pub display_signature_help_docs: bool,
+    /// Display diagnostic on the same line they occur automatically.
+    /// Also called "error lens"-style diagnostics, in reference to the popular VSCode extension.
+    pub display_inline_diagnostics: bool,
 }
 
 impl Default for LspConfig {
@@ -388,6 +391,7 @@ impl Default for LspConfig {
             display_messages: false,
             auto_signature_help: true,
             display_signature_help_docs: true,
+            display_inline_diagnostics: true,
         }
     }
 }
@@ -1158,6 +1162,13 @@ impl Editor {
 
     fn _refresh(&mut self) {
         let config = self.config();
+
+        if !config.lsp.display_inline_diagnostics {
+            for doc in self.documents_mut() {
+                doc.reset_diagnostics_annotations();
+            }
+        }
+
         for (view, _) in self.tree.views_mut() {
             let doc = doc_mut!(self, &view.doc);
             view.sync_changes(doc);
