@@ -1173,6 +1173,8 @@ impl Editor {
         if !config.lsp.display_inline_diagnostics {
             for doc in self.documents_mut() {
                 doc.reset_diagnostics_annotations();
+            }
+        }
         // Reset the inlay hints annotations *before* updating the views, that way we ensure they
         // will disappear during the `.sync_change(doc)` call below.
         //
