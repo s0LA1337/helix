@@ -385,6 +385,8 @@ pub struct LspConfig {
     /// Display diagnostic on the same line they occur automatically.
     /// Also called "error lens"-style diagnostics, in reference to the popular VSCode extension.
     pub display_inline_diagnostics: bool,
+    /// Display inlay hints
+    pub display_inlay_hints: bool,
 }
 
 impl Default for LspConfig {
@@ -395,6 +397,7 @@ impl Default for LspConfig {
             auto_signature_help: true,
             display_signature_help_docs: true,
             display_inline_diagnostics: true,
+            display_inlay_hints: false,
         }
     }
 }
@@ -1170,6 +1173,15 @@ impl Editor {
         if !config.lsp.display_inline_diagnostics {
             for doc in self.documents_mut() {
                 doc.reset_diagnostics_annotations();
+        // Reset the inlay hints annotations *before* updating the views, that way we ensure they
+        // will disappear during the `.sync_change(doc)` call below.
+        //
+        // We can't simply check this config when rendering because inlay hints are only parts of
+        // the possible annotations, and others could still be active, so we need to selectively
+        // drop the inlay hints.
+        if !config.lsp.display_inlay_hints {
+            for doc in self.documents_mut() {
+                doc.reset_all_inlay_hints();
             }
         }
 

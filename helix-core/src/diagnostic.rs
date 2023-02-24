@@ -37,7 +37,7 @@ pub enum DiagnosticTag {
     Deprecated,
 }
 
-/// Corresponds to [`lsp_types::Diagnostic`](https://docs.rs/lsp-types/0.91.0/lsp_types/struct.Diagnostic.html)
+/// Corresponds to [`lsp_types::Diagnostic`](https://docs.rs/lsp-types/0.94.0/lsp_types/struct.Diagnostic.html)
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     pub range: Range,
