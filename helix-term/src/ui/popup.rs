@@ -12,6 +12,7 @@ use helix_core::Position;
 use helix_view::{
     editor::PopupBorderConfig,
     graphics::{Margin, Rect},
+    Editor,
 };
 
 // TODO: share logic with Menu, it's essentially Popup(render_fn), but render fn needs to return
