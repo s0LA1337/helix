@@ -11,6 +11,14 @@ use helix_view::{Document, Theme, View};
 
 use crate::ui::document::{LineDecoration, LinePos, TextRenderer};
 
+fn clamp_y_to_viewport(viewport: &Rect, y: u16) -> u16 {
+    if y > viewport.height {
+        viewport.height
+    } else {
+        y
+    }
+}
+
 pub fn inline_diagnostics_decorator(
     doc: &Document,
     view: &View,
@@ -236,7 +244,7 @@ pub fn inline_diagnostics_decorator(
             // is also applied to the gutters and other elements that are not in the editable part of the document
             let diag_area = Rect::new(
                 whole_view_aera.x,
-                pos_y + 1,
+                clamp_y_to_viewport(&viewport, pos_y + 1),
                 whole_view_aera.width,
                 lines_offset,
             );
@@ -244,7 +252,7 @@ pub fn inline_diagnostics_decorator(
 
             for (offset, line) in text.lines().enumerate() {
                 let mut pos_x = viewport.x;
-                let pos_y = pos_y + 1 + offset as u16;
+                let pos_y = clamp_y_to_viewport(&viewport, pos_y + 1 + offset as u16);
 
                 for item in left.iter().chain(center.iter()) {
                     let (text, style, width): (Cow<str>, _, _) = match *item {
