@@ -529,17 +529,15 @@ impl Component for Completion {
         // clear area
         let background = cx.editor.theme.get("ui.popup");
         surface.clear_with(doc_area, background);
-        markdown_doc.render(doc_area, surface, cx);
-        // clear area
-        let background = cx.editor.theme.get("ui.popup");
-        surface.clear_with(area, background);
-
         let border_config = &cx.editor.config().popup_border;
 
-        if border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Popup {
+        if border_config == &PopupBorderConfig::All
+            || border_config == &PopupBorderConfig::Popup
+        {
             use tui::widgets::{Block, Borders, Widget};
-            Widget::render(Block::default().borders(Borders::ALL), area, surface);
+            Widget::render(Block::default().borders(Borders::ALL), doc_area, surface);
         }
-        markdown_doc.render(area, surface, cx);
+
+        markdown_doc.render(doc_area, surface, cx);
     }
 }
