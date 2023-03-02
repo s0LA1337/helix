@@ -305,6 +305,26 @@ pub struct Config {
     pub rainbow_brackets: bool,
     /// Draw border around popups.
     pub popup_border: PopupBorderConfig,
+    /// Contextual information on top of the viewport
+    pub sticky_context: StickyContextConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct StickyContextConfig {
+    /// Display context of current top view if it is outside the view. Default to off
+    pub enable: bool,
+
+    /// Display an indicator whether to indicate if the sticky context is active
+    /// Eventually making this a string so that it is configurable.
+    pub indicator: bool,
+
+    /// The max amount of lines to be displayed. (including indicator!)
+    /// The viewport is taken into account when changing this value.
+    /// So if the configured amount is more than the viewport height.
+    ///
+    /// Default: 0, which means that it is a fixed size based on the viewport
+    pub max_lines: u16,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -839,6 +859,7 @@ impl Default for Config {
             rainbow_brackets: false,
             completion_replace: false,
             popup_border: PopupBorderConfig::None,
+            sticky_context: StickyContextConfig::default(),
         }
     }
 }

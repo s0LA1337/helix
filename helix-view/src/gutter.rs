@@ -11,7 +11,8 @@ fn count_digits(n: usize) -> usize {
     std::iter::successors(Some(n), |&n| (n >= 10).then_some(n / 10)).count()
 }
 
-pub type GutterFn<'doc> = Box<dyn FnMut(usize, bool, bool, &mut String) -> Option<Style> + 'doc>;
+pub type GutterFn<'doc> =
+    Box<dyn FnMut(Option<usize>, bool, bool, &mut String) -> Option<Style> + 'doc>;
 pub type Gutter =
     for<'doc> fn(&'doc Editor, &'doc Document, &View, &Theme, bool, usize) -> GutterFn<'doc>;
 
@@ -58,10 +59,11 @@ pub fn diagnostic<'doc>(
     let diagnostics = doc.diagnostics();
 
     Box::new(
-        move |line: usize, _selected: bool, first_visual_line: bool, out: &mut String| {
+        move |line: Option<usize>, _selected: bool, first_visual_line: bool, out: &mut String| {
             if !first_visual_line {
                 return None;
             }
+            let line = line?;
             use helix_core::diagnostic::Severity;
             if let Ok(index) = diagnostics.binary_search_by_key(&line, |d| d.line) {
                 let after = diagnostics[index..].iter().take_while(|d| d.line == line);
@@ -111,12 +113,17 @@ pub fn diff<'doc>(
         let mut hunk = hunks.nth_hunk(hunk_i);
         let icons = &editor.icons;
         Box::new(
-            move |line: usize, _selected: bool, first_visual_line: bool, out: &mut String| {
+            move |line: Option<usize>,
+                  _selected: bool,
+                  first_visual_line: bool,
+                  out: &mut String| {
                 // truncating the line is fine here because we don't compute diffs
                 // for files with more lines than i32::MAX anyways
                 // we need to special case removals here
                 // these technically do not have a range of lines to highlight (`hunk.after.start == hunk.after.end`).
                 // However we still want to display these hunks correctly we must not yet skip to the next hunk here
+                let line = line?;
+
                 while hunk.after.end < line as u32
                     || !hunk.is_pure_removal() && line as u32 == hunk.after.end
                 {
@@ -175,7 +182,8 @@ pub fn line_numbers<'doc>(
     let mode = editor.mode;
 
     Box::new(
-        move |line: usize, selected: bool, first_visual_line: bool, out: &mut String| {
+        move |line: Option<usize>, selected: bool, first_visual_line: bool, out: &mut String| {
+            let line = line?;
             if line == last_line_in_view && !draw_last {
                 write!(out, "{:>1$}", '~', width).unwrap();
                 Some(linenr)
@@ -233,7 +241,9 @@ pub fn padding<'doc>(
     _theme: &Theme,
     _is_focused: bool,
 ) -> GutterFn<'doc> {
-    Box::new(|_line: usize, _selected: bool, _first_visual_line: bool, _out: &mut String| None)
+    Box::new(
+        |_line: Option<usize>, _selected: bool, _first_visual_line: bool, _out: &mut String| None,
+    )
 }
 
 #[inline(always)]
@@ -264,10 +274,11 @@ pub fn breakpoints<'doc>(
     };
 
     Box::new(
-        move |line: usize, _selected: bool, first_visual_line: bool, out: &mut String| {
+        move |line: Option<usize>, _selected: bool, first_visual_line: bool, out: &mut String| {
             if !first_visual_line {
                 return None;
             }
+            let line = line?;
             let breakpoint = breakpoints
                 .iter()
                 .find(|breakpoint| breakpoint.line == line)?;
