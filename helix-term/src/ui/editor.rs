@@ -1001,9 +1001,9 @@ impl EditorView {
         // we render from top most (last in the list)
         context = context
             .into_iter()
-            .rev()
-            // only take the nodes until 1 / 3 of the viewport is reached or the maximum amount of sticky nodes             .take(viewport.height as usize / 3)
+            // only take the nodes until 1 / 3 of the viewport is reached or the maximum amount of sticky nodes
             .take(max_nodes_amount)
+            .rev()
             .enumerate()
             .take_while(|(i, _)| *i + 1 != visual_cursor_pos as usize) // also only nodes that don't overlap with the visual cursor position
             .map(|(i, node)| {
