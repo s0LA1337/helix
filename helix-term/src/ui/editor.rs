@@ -183,6 +183,12 @@ impl EditorView {
                 Some(match_highlights) => Box::new(syntax::merge(highlights, match_highlights)),
                 None => highlights,
             };
+        if config.cursor_word {
+            if let Some(cursor_word_highlights) =
+                Self::collect_cursor_word_highlights(doc, editor, view, viewport, theme)
+            {
+                highlights = Box::new(syntax::merge(highlights, cursor_word_highlights));
+            }
         }
 
         for diagnostic in Self::doc_diagnostics_highlights(doc, theme) {
@@ -324,6 +330,121 @@ impl EditorView {
             .filter(|ruler| ruler < &viewport.width)
             .map(|ruler| viewport.clip_left(ruler).with_width(1))
             .for_each(|area| surface.set_style(area, ruler_theme))
+    }
+
+    pub fn cursor_word(doc: &Document, view: &View) -> Option<String> {
+        let is_word = |c: char| -> bool { c.is_ascii_alphanumeric() || c == '-' || c == '_' };
+
+        let text = doc.text().slice(..);
+        let cursor = doc.selection(view.id).primary().cursor(text);
+        let cursor_char = text.byte_to_char(cursor);
+        let char_under_cursor = text.get_char(cursor_char);
+        if !is_word(char_under_cursor?) {
+            return None;
+        }
+
+        let start = (0..=cursor_char)
+            .rev()
+            .find(|&i| !is_word(text.char(i)))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let end = (cursor_char..text.len_chars())
+            .find(|&i| !is_word(text.char(i)))
+            .unwrap_or_else(|| text.len_chars());
+
+        Some(text.slice(start..end).to_string())
+    }
+
+    /// Calculates the ranges of the word under the cursor and returns the result
+    fn calculate_cursor_word(
+        doc: &Document,
+        view: &View,
+        viewport: Rect,
+        scope_index: usize,
+    ) -> Vec<(usize, std::ops::Range<usize>)> {
+        let text = doc.text().slice(..);
+        let mut result = Vec::new();
+
+        let cursor_word = match Self::cursor_word(doc, view) {
+            Some(cw) => cw,
+            None => return result,
+        };
+
+        let is_word_char = |c: Option<char>| -> bool {
+            if let Some(c) = c {
+                c.is_ascii_alphanumeric() || c == '-' || c == '_'
+            } else {
+                false
+            }
+        };
+
+        let row = text.char_to_line(view.offset.anchor.min(text.len_chars()));
+
+        let line_range = {
+            // Calculate the lines in view
+            let last_line = text.len_lines().saturating_sub(1);
+            let last_visible_line = (row + viewport.height as usize).min(last_line);
+            let first_visible_line = row;
+
+            first_visible_line..last_visible_line
+        };
+
+        for line in line_range {
+            let current_line = text.line(line);
+            let current_line = match current_line.as_str() {
+                Some(l) => l,
+                None => continue,
+            };
+
+            let line_offset = text.line_to_char(line);
+
+            result.extend(
+                current_line
+                    .match_indices(&cursor_word)
+                    .map(|(i, _)| i)
+                    .filter(|i| {
+                        if *i != 0 {
+                            !is_word_char(current_line.chars().nth(i - 1))
+                        } else {
+                            true
+                        }
+                    })
+                    .filter(|i| !is_word_char(current_line.chars().nth(i + cursor_word.len())))
+                    .map(|i| line_offset + i)
+                    .map(|start| (scope_index, { start..start + cursor_word.len() })),
+            );
+        }
+
+        result
+    }
+
+    /// Apply the decoration for the word to be highlighted
+    pub fn collect_cursor_word_highlights(
+        doc: &Document,
+        editor: &Editor,
+        view: &View,
+        viewport: Rect,
+        theme: &Theme,
+    ) -> Option<Vec<(usize, std::ops::Range<usize>)>> {
+        let scope_index = theme.find_scope_index("ui.wordmatch")?;
+        let mut result: Vec<(usize, std::ops::Range<usize>)> = Vec::new();
+        let is_lsp_ready = doc.language_server().is_some() && !editor.cursor_highlights.is_empty();
+        match is_lsp_ready {
+            true => result.extend(
+                editor
+                    .cursor_highlights
+                    .iter()
+                    .map(|range| (scope_index, range.to_owned())),
+            ),
+            false => result.extend(Self::calculate_cursor_word(
+                doc,
+                view,
+                viewport,
+                scope_index,
+            )),
+        }
+
+        Some(result)
     }
 
     pub fn overlay_syntax_highlights(
@@ -1341,6 +1462,10 @@ impl EditorView {
             } else {
                 EventResult::Ignored(None)
             };
+        }
+
+        if cx.editor.config().cursor_word {
+            crate::commands::highlight_symbol_under_cursor(cx);
         }
 
         if cx.editor.mode != Mode::Insert || !cx.editor.config().auto_completion {

@@ -288,6 +288,15 @@ pub mod util {
             None => find_completion_range(text, replace_mode, cursor),
         };
         Some(res)
+    pub fn lsp_range_to_ops_range(
+        doc: &Rope,
+        range: lsp::Range,
+        offset_encoding: OffsetEncoding,
+    ) -> Option<std::ops::Range<usize>> {
+        let start = lsp_pos_to_pos(doc, range.start, offset_encoding)?;
+        let end = lsp_pos_to_pos(doc, range.end, offset_encoding)?;
+
+        Some(start..end)
     }
 
     /// Creates a [Transaction] from the [lsp::TextEdit] in a completion response.

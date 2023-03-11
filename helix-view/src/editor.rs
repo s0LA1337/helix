@@ -327,6 +327,7 @@ pub struct StickyContextConfig {
     ///
     /// Default: 0, which means that it is a fixed size based on the viewport
     pub max_lines: u16,
+    pub cursor_word: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -827,6 +828,7 @@ impl Default for Config {
             rainbow_brackets: false,
             popup_border: PopupBorderConfig::None,
             sticky_context: StickyContextConfig::default(),
+            cursor_word: false,
             text_width: 80,
             completion_replace: false,
         }
@@ -946,6 +948,9 @@ pub struct Editor {
     /// avoid calculating the cursor position multiple
     /// times during rendering and should not be set by other functions.
     pub cursor_cache: Cell<Option<Option<Position>>>,
+
+    /// Contains all the cursor word highlights
+    pub cursor_highlights: Arc<Vec<std::ops::Range<usize>>>,
     /// When a new completion request is sent to the server old
     /// unifinished request must be dropped. Each completion
     /// request is associated with a channel that cancels
@@ -1058,6 +1063,7 @@ impl Editor {
             redraw_handle: Default::default(),
             needs_redraw: false,
             cursor_cache: Cell::new(None),
+            cursor_highlights: Arc::new(Vec::new()),
             completion_request_handle: None,
         }
     }
