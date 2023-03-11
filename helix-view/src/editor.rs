@@ -309,6 +309,8 @@ pub struct Config {
     pub popup_border: PopupBorderConfig,
     /// Contextual information on top of the viewport
     pub sticky_context: StickyContextConfig,
+    /// Highlight all words under the cursor
+    pub cursor_word: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

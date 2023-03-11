@@ -1672,6 +1672,8 @@ fn compute_inlay_hints_for_view(
     );
 
     Some(callback)
+}
+
 pub fn highlight_symbol_under_cursor(cx: &mut Context) {
     let (view, doc) = current!(cx.editor);
     let language_server = language_server!(cx.editor, doc);

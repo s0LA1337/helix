@@ -183,21 +183,22 @@ impl EditorView {
                 Some(match_highlights) => Box::new(syntax::merge(highlights, match_highlights)),
                 None => highlights,
             };
-        if config.cursor_word {
-            if let Some(cursor_word_highlights) =
-                Self::collect_cursor_word_highlights(doc, editor, view, viewport, theme)
-            {
-                highlights = Box::new(syntax::merge(highlights, cursor_word_highlights));
+            if config.cursor_word {
+                if let Some(cursor_word_highlights) =
+                    Self::collect_cursor_word_highlights(doc, editor, view, viewport, theme)
+                {
+                    highlights = Box::new(syntax::merge(highlights, cursor_word_highlights));
+                }
             }
-        }
 
-        for diagnostic in Self::doc_diagnostics_highlights(doc, theme) {
-            // Most of the `diagnostic` Vecs are empty most of the time. Skipping
-            // a merge for any empty Vec saves a significant amount of work.
-            if diagnostic.is_empty() {
-                continue;
+            for diagnostic in Self::doc_diagnostics_highlights(doc, theme) {
+                // Most of the `diagnostic` Vecs are empty most of the time. Skipping
+                // a merge for any empty Vec saves a significant amount of work.
+                if diagnostic.is_empty() {
+                    continue;
+                }
+                highlights = Box::new(syntax::merge(highlights, diagnostic));
             }
-            highlights = Box::new(syntax::merge(highlights, diagnostic));
         }
 
         let highlights: Box<dyn Iterator<Item = HighlightEvent>> = if is_focused {
@@ -1476,9 +1477,7 @@ impl EditorView {
 
         EventResult::Consumed(None)
     }
-}
 
-impl EditorView {
     fn handle_mouse_event(
         &mut self,
         event: &MouseEvent,

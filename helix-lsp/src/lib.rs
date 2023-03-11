@@ -288,6 +288,8 @@ pub mod util {
             None => find_completion_range(text, replace_mode, cursor),
         };
         Some(res)
+    }
+
     pub fn lsp_range_to_ops_range(
         doc: &Rope,
         range: lsp::Range,
