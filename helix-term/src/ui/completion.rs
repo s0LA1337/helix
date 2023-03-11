@@ -8,7 +8,7 @@ use helix_view::{
 };
 use tui::{buffer::Buffer as Surface, text::Span};
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use helix_core::{chars, Change, Transaction};
 use helix_view::{graphics::Rect, Document, Editor};
@@ -104,6 +104,7 @@ impl Completion {
 
     pub fn new(
         editor: &Editor,
+        savepoint: Arc<SavePoint>,
         mut items: Vec<CompletionItem>,
         offset_encoding: helix_lsp::OffsetEncoding,
         start_offset: usize,
@@ -120,11 +121,16 @@ impl Completion {
                 view_id: ViewId,
                 item: &CompletionItem,
                 offset_encoding: helix_lsp::OffsetEncoding,
-                start_offset: usize,
                 trigger_offset: usize,
+                include_placeholder: bool,
                 replace_mode: bool,
             ) -> Transaction {
-                let transaction = if let Some(edit) = &item.text_edit {
+                use helix_lsp::snippet;
+                let selection = doc.selection(view_id);
+                let text = doc.text().slice(..);
+                let primary_cursor = selection.primary().cursor(text);
+
+                let (edit_offset, new_text) = if let Some(edit) = &item.text_edit {
                     let edit = match edit {
                         lsp::CompletionTextEdit::Edit(edit) => edit.clone(),
                         lsp::CompletionTextEdit::InsertAndReplace(item) => {
@@ -137,55 +143,67 @@ impl Completion {
                         }
                     };
 
-                    util::generate_transaction_from_completion_edit(
-                        doc.text(),
-                        doc.selection(view_id),
-                        edit,
-                        offset_encoding, // TODO: should probably transcode in Client
-                    )
+                    let start_offset =
+                        match util::lsp_pos_to_pos(doc.text(), edit.range.start, offset_encoding) {
+                            Some(start) => start as i128 - primary_cursor as i128,
+                            None => return Transaction::new(doc.text()),
+                        };
+                    let end_offset =
+                        match util::lsp_pos_to_pos(doc.text(), edit.range.end, offset_encoding) {
+                            Some(end) => end as i128 - primary_cursor as i128,
+                            None => return Transaction::new(doc.text()),
+                        };
+
+                    (Some((start_offset, end_offset)), edit.new_text)
                 } else {
-                    let text = item.insert_text.as_ref().unwrap_or(&item.label);
-                    let doc_text = doc.text().slice(..);
-                    let primary_cursor = doc.selection(view_id).primary().cursor(doc_text);
-
-                    // TODO: this needs to be true for the closure below to work out
-                    // It's passed in to a callback as this same
-                    // formula, but can the value change between the LSP request and
-                    // response? If it does, can we recover?
+                    let new_text = item
+                        .insert_text
+                        .clone()
+                        .unwrap_or_else(|| item.label.clone());
+                    // check that we are still at the correct savepoint
+                    // we can still generate a transaction regardless but if the
+                    // document changed (and not just the selection) then we will
+                    // likely delete the wrong text (same if we applied an edit sent by the LS)
                     debug_assert!(primary_cursor == trigger_offset);
-                    let start_offset = primary_cursor - start_offset;
-
-                    Transaction::change_by_selection_ignore_overlapping(
-                        doc.text(),
-                        doc.selection(view_id),
-                        |range| {
-                            let cursor = range.cursor(doc_text);
-                            // if inserting a completion at this cursor would go out of bounds
-                            // return a trivial edit
-                            if cursor < start_offset {
-                                return (0, 0, None);
-                            }
-                            let end_offset = if replace_mode {
-                                // in replace mode replace the rest of the word
-                                doc_text
-                                    .chars_at(primary_cursor)
-                                    .take_while(|ch| chars::char_is_word(*ch))
-                                    .count()
-                            } else {
-                                // otherwise only replace up to the current edit
-                                0
-                            };
-
-                            (
-                                cursor - start_offset,
-                                cursor + end_offset,
-                                Some(text.into()),
-                            )
-                        },
-                    )
+                    (None, new_text)
                 };
 
-                transaction
+                if matches!(item.kind, Some(lsp::CompletionItemKind::SNIPPET))
+                    || matches!(
+                        item.insert_text_format,
+                        Some(lsp::InsertTextFormat::SNIPPET)
+                    )
+                {
+                    match snippet::parse(&new_text) {
+                        Ok(snippet) => util::generate_transaction_from_snippet(
+                            doc.text(),
+                            selection,
+                            edit_offset,
+                            replace_mode,
+                            snippet,
+                            doc.line_ending.as_str(),
+                            include_placeholder,
+                            doc.tab_width(),
+                            doc.indent_width(),
+                        ),
+                        Err(err) => {
+                            log::error!(
+                                "Failed to parse snippet: {:?}, remaining output: {}",
+                                &new_text,
+                                err
+                            );
+                            Transaction::new(doc.text())
+                        }
+                    }
+                } else {
+                    util::generate_transaction_from_completion_edit(
+                        doc.text(),
+                        selection,
+                        edit_offset,
+                        replace_mode,
+                        new_text,
+                    )
+                }
             }
 
             fn completion_changes(transaction: &Transaction, trigger_offset: usize) -> Vec<Change> {
@@ -198,11 +216,10 @@ impl Completion {
             let (view, doc) = current!(editor);
 
             // if more text was entered, remove it
-            doc.restore(view);
+            doc.restore(view, &savepoint);
 
             match event {
                 PromptEvent::Abort => {
-                    doc.restore(view);
                     editor.last_completion = None;
                 }
                 PromptEvent::Update => {
@@ -214,13 +231,12 @@ impl Completion {
                         view.id,
                         item,
                         offset_encoding,
-                        start_offset,
                         trigger_offset,
+                        true,
                         replace_mode,
                     );
 
                     // initialize a savepoint
-                    doc.savepoint();
                     doc.apply(&transaction, view.id);
 
                     editor.last_completion = Some(CompleteAction {
@@ -237,8 +253,8 @@ impl Completion {
                         view.id,
                         item,
                         offset_encoding,
-                        start_offset,
                         trigger_offset,
+                        false,
                         replace_mode,
                     );
 

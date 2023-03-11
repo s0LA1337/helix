@@ -57,7 +57,7 @@ use crate::{
     job::Callback,
     keymap::ReverseKeymap,
     ui::{
-        self, lsp::SignatureHelp, overlay::overlayed, FilePicker, Picker, Popup, Prompt,
+        self, editor::InsertEvent, overlay::overlayed, FilePicker, Picker, Popup, Prompt,
         PromptEvent,
     },
 };
@@ -448,6 +448,7 @@ impl MappableCommand {
         goto_next_paragraph, "Goto next paragraph",
         goto_prev_paragraph, "Goto previous paragraph",
         dap_launch, "Launch debug target",
+        dap_restart, "Restart debugging session",
         dap_toggle_breakpoint, "Toggle breakpoint",
         dap_continue, "Continue program execution",
         dap_pause, "Pause program execution",
@@ -2888,10 +2889,15 @@ fn push_jump(view: &mut View, doc: &Document) {
 }
 
 fn goto_line(cx: &mut Context) {
-    goto_line_impl(cx.editor, cx.count)
+    if cx.count.is_some() {
+        let (view, doc) = current!(cx.editor);
+        push_jump(view, doc);
+
+        goto_line_without_jumplist(cx.editor, cx.count);
+    }
 }
 
-fn goto_line_impl(editor: &mut Editor, count: Option<NonZeroUsize>) {
+fn goto_line_without_jumplist(editor: &mut Editor, count: Option<NonZeroUsize>) {
     if let Some(count) = count {
         let (view, doc) = current!(editor);
         let text = doc.text().slice(..);
@@ -2908,7 +2914,6 @@ fn goto_line_impl(editor: &mut Editor, count: Option<NonZeroUsize>) {
             .clone()
             .transform(|range| range.put_cursor(text, pos, editor.mode == Mode::Select));
 
-        push_jump(view, doc);
         doc.set_selection(view.id, selection);
     }
 }
@@ -3002,7 +3007,6 @@ fn goto_first_diag(cx: &mut Context) {
         None => return,
     };
     doc.set_selection(view.id, selection);
-    align_view(doc, view, Align::Center);
 }
 
 fn goto_last_diag(cx: &mut Context) {
@@ -3012,7 +3016,6 @@ fn goto_last_diag(cx: &mut Context) {
         None => return,
     };
     doc.set_selection(view.id, selection);
-    align_view(doc, view, Align::Center);
 }
 
 fn goto_next_diag(cx: &mut Context) {
@@ -3034,7 +3037,6 @@ fn goto_next_diag(cx: &mut Context) {
         None => return,
     };
     doc.set_selection(view.id, selection);
-    align_view(doc, view, Align::Center);
 }
 
 fn goto_prev_diag(cx: &mut Context) {
@@ -3059,7 +3061,6 @@ fn goto_prev_diag(cx: &mut Context) {
         None => return,
     };
     doc.set_selection(view.id, selection);
-    align_view(doc, view, Align::Center);
 }
 
 fn goto_first_change(cx: &mut Context) {
@@ -3075,13 +3076,13 @@ fn goto_first_change_impl(cx: &mut Context, reverse: bool) {
     let (view, doc) = current!(editor);
     if let Some(handle) = doc.diff_handle() {
         let hunk = {
-            let hunks = handle.hunks();
+            let diff = handle.load();
             let idx = if reverse {
-                hunks.len().saturating_sub(1)
+                diff.len().saturating_sub(1)
             } else {
                 0
             };
-            hunks.nth_hunk(idx)
+            diff.nth_hunk(idx)
         };
         if hunk != Hunk::NONE {
             let range = hunk_range(hunk, doc.text().slice(..));
@@ -3113,22 +3114,19 @@ fn goto_next_change_impl(cx: &mut Context, direction: Direction) {
         let selection = doc.selection(view.id).clone().transform(|range| {
             let cursor_line = range.cursor_line(doc_text) as u32;
 
-            let hunks = diff_handle.hunks();
+            let diff = diff_handle.load();
             let hunk_idx = match direction {
-                Direction::Forward => hunks
+                Direction::Forward => diff
                     .next_hunk(cursor_line)
-                    .map(|idx| (idx + count).min(hunks.len() - 1)),
-                Direction::Backward => hunks
+                    .map(|idx| (idx + count).min(diff.len() - 1)),
+                Direction::Backward => diff
                     .prev_hunk(cursor_line)
                     .map(|idx| idx.saturating_sub(count)),
             };
-            // TODO refactor with let..else once MSRV reaches 1.65
-            let hunk_idx = if let Some(hunk_idx) = hunk_idx {
-                hunk_idx
-            } else {
+            let Some(hunk_idx) = hunk_idx else {
                 return range;
             };
-            let hunk = hunks.nth_hunk(hunk_idx);
+            let hunk = diff.nth_hunk(hunk_idx);
             let new_range = hunk_range(hunk, doc_text);
             if editor.mode == Mode::Select {
                 let head = if new_range.head < range.anchor {
@@ -4234,6 +4232,24 @@ pub fn completion(cx: &mut Context) {
         None => return,
     };
 
+    // setup a chanel that allows the request to be canceled
+    let (tx, rx) = oneshot::channel();
+    // set completion_request so that this request can be canceled
+    // by setting completion_request, the old channel stored there is dropped
+    // and the associated request is automatically dropped
+    cx.editor.completion_request_handle = Some(tx);
+    let future = async move {
+        tokio::select! {
+            biased;
+            _ = rx => {
+                Ok(serde_json::Value::Null)
+            }
+            res = future => {
+                res
+            }
+        }
+    };
+
     let trigger_offset = cursor;
 
     // TODO: trigger_offset should be the cursor offset but we also need a starting offset from where we want to apply
@@ -4244,12 +4260,35 @@ pub fn completion(cx: &mut Context) {
     iter.reverse();
     let offset = iter.take_while(|ch| chars::char_is_word(*ch)).count();
     let start_offset = cursor.saturating_sub(offset);
+    let savepoint = doc.savepoint(view);
+
+    let trigger_doc = doc.id();
+    let trigger_view = view.id;
+
+    // FIXME: The commands Context can only have a single callback
+    // which means it gets overwritten when executing keybindings
+    // with multiple commands or macros. This would mean that completion
+    // might be incorrectly applied when repeating the insertmode action
+    //
+    // TODO: to solve this either make cx.callback a Vec of callbacks or
+    // alternatively move `last_insert` to `helix_view::Editor`
+    cx.callback = Some(Box::new(
+        move |compositor: &mut Compositor, _cx: &mut compositor::Context| {
+            let ui = compositor.find::<ui::EditorView>().unwrap();
+            ui.last_insert.1.push(InsertEvent::RequestCompletion);
+        },
+    ));
 
     cx.callback(
         future,
         move |editor, compositor, response: Option<lsp::CompletionResponse>| {
-            if editor.mode != Mode::Insert {
-                // we're not in insert mode anymore
+            let (view, doc) = current_ref!(editor);
+            // check if the completion request is stale.
+            //
+            // Completions are completed asynchrounsly and therefore the user could
+            //switch document/view or leave insert mode. In all of thoise cases the
+            // completion should be discarded
+            if editor.mode != Mode::Insert || view.id != trigger_view || doc.id() != trigger_doc {
                 return;
             }
 
@@ -4272,23 +4311,15 @@ pub fn completion(cx: &mut Context) {
                 .find_id::<Popup<SignatureHelp>>(SignatureHelp::ID)
                 .map(|signature_help| signature_help.area(size, editor));
             let ui = compositor.find::<ui::EditorView>().unwrap();
-
-            // Delete the signature help popup if they intersect.
-            if ui
-                .set_completion(
-                    editor,
-                    items,
-                    offset_encoding,
-                    start_offset,
-                    trigger_offset,
-                    size,
-                )
-                .zip(signature_help_area)
-                .filter(|(a, b)| a.intersects(*b))
-                .is_some()
-            {
-                compositor.remove(SignatureHelp::ID);
-            }
+            ui.set_completion(
+                editor,
+                savepoint,
+                items,
+                offset_encoding,
+                start_offset,
+                trigger_offset,
+                size,
+            );
         },
     );
 }
@@ -4400,7 +4431,6 @@ fn shrink_selection(cx: &mut Context) {
         // try to restore previous selection
         if let Some(prev_selection) = view.object_selections.pop() {
             if current_selection.contains(&prev_selection) {
-                // allow shrinking the selection only if current selection contains the previous object selection
                 doc.set_selection(view.id, prev_selection);
                 return;
             } else {
@@ -4800,14 +4830,14 @@ fn select_textobject(cx: &mut Context, objtype: textobject::TextObject) {
 
                 let textobject_change = |range: Range| -> Range {
                     let diff_handle = doc.diff_handle().unwrap();
-                    let hunks = diff_handle.hunks();
+                    let diff = diff_handle.load();
                     let line = range.cursor_line(text);
-                    let hunk_idx = if let Some(hunk_idx) = hunks.hunk_at(line as u32, false) {
+                    let hunk_idx = if let Some(hunk_idx) = diff.hunk_at(line as u32, false) {
                         hunk_idx
                     } else {
                         return range;
                     };
-                    let hunk = hunks.nth_hunk(hunk_idx).after;
+                    let hunk = diff.nth_hunk(hunk_idx).after;
 
                     let start = text.line_to_char(hunk.start as usize);
                     let end = text.line_to_char(hunk.end as usize);

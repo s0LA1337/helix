@@ -109,6 +109,7 @@ pub fn diff<'doc>(
         let deleted = theme.get("diff.minus");
         let modified = theme.get("diff.delta");
         let hunks = diff_handle.hunks();
+        let hunks = diff_handle.load();
         let mut hunk_i = 0;
         let mut hunk = hunks.nth_hunk(hunk_i);
         let icons = &editor.icons;

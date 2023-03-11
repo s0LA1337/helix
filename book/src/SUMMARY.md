@@ -6,7 +6,7 @@
 - [Usage](./usage.md)
   - [Keymap](./keymap.md)
   - [Commands](./commands.md)
-  - [Language Support](./lang-support.md)
+  - [Language support](./lang-support.md)
 - [Migrating from Vim](./from-vim.md)
 - [Configuration](./configuration.md)
   - [Themes](./themes.md)

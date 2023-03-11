@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     str,
 };
@@ -37,16 +37,155 @@ pub static BASE16_DEFAULT_THEME: Lazy<Theme> = Lazy::new(|| Theme {
 
 #[derive(Clone, Debug)]
 pub struct Loader {
-    user_dir: PathBuf,
-    default_dir: PathBuf,
+    /// Theme directories to search from highest to lowest priority
+    theme_dirs: Vec<PathBuf>,
 }
 impl Loader {
-    /// Creates a new loader that can load themes from two directories.
-    pub fn new<P: AsRef<Path>>(user_dir: P, default_dir: P) -> Self {
+    /// Creates a new loader that can load themes from multiple directories.
+    ///
+    /// The provided directories should be ordered from highest to lowest priority.
+    /// The directories will have their "themes" subdirectory searched.
+    pub fn new(dirs: &[PathBuf]) -> Self {
         Self {
-            user_dir: user_dir.as_ref().join("themes"),
-            default_dir: default_dir.as_ref().join("themes"),
+            theme_dirs: dirs.iter().map(|p| p.join("themes")).collect(),
         }
+    }
+
+    /// Loads a theme searching directories in priority order.
+    pub fn load(&self, name: &str) -> Result<Theme> {
+        if name == "default" {
+            return Ok(self.default());
+        }
+        if name == "base16_default" {
+            return Ok(self.base16_default());
+        }
+
+        let mut visited_paths = HashSet::new();
+        let theme = self.load_theme(name, &mut visited_paths).map(Theme::from)?;
+
+        Ok(Theme {
+            name: name.into(),
+            ..theme
+        })
+    }
+
+    /// Recursively load a theme, merging with any inherited parent themes.
+    ///
+    /// The paths that have been visited in the inheritance hierarchy are tracked
+    /// to detect and avoid cycling.
+    ///
+    /// It is possible for one file to inherit from another file with the same name
+    /// so long as the second file is in a themes directory with lower priority.
+    /// However, it is not recommended that users do this as it will make tracing
+    /// errors more difficult.
+    fn load_theme(&self, name: &str, visited_paths: &mut HashSet<PathBuf>) -> Result<Value> {
+        let path = self.path(name, visited_paths)?;
+
+        let theme_toml = self.load_toml(path)?;
+
+        let inherits = theme_toml.get("inherits");
+
+        let theme_toml = if let Some(parent_theme_name) = inherits {
+            let parent_theme_name = parent_theme_name.as_str().ok_or_else(|| {
+                anyhow!(
+                    "Theme: expected 'inherits' to be a string: {}",
+                    parent_theme_name
+                )
+            })?;
+
+            let parent_theme_toml = match parent_theme_name {
+                // load default themes's toml from const.
+                "default" => DEFAULT_THEME_DATA.clone(),
+                "base16_default" => BASE16_DEFAULT_THEME_DATA.clone(),
+                _ => self.load_theme(parent_theme_name, visited_paths)?,
+            };
+
+            self.merge_themes(parent_theme_toml, theme_toml)
+        } else {
+            theme_toml
+        };
+
+        Ok(theme_toml)
+    }
+
+    pub fn read_names(path: &Path) -> Vec<String> {
+        std::fs::read_dir(path)
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| {
+                        let entry = entry.ok()?;
+                        let path = entry.path();
+                        (path.extension()? == "toml")
+                            .then(|| path.file_stem().unwrap().to_string_lossy().into_owned())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // merge one theme into the parent theme
+    fn merge_themes(&self, parent_theme_toml: Value, theme_toml: Value) -> Value {
+        let parent_palette = parent_theme_toml.get("palette");
+        let palette = theme_toml.get("palette");
+
+        // handle the table seperately since it needs a `merge_depth` of 2
+        // this would conflict with the rest of the theme merge strategy
+        let palette_values = match (parent_palette, palette) {
+            (Some(parent_palette), Some(palette)) => {
+                merge_toml_values(parent_palette.clone(), palette.clone(), 2)
+            }
+            (Some(parent_palette), None) => parent_palette.clone(),
+            (None, Some(palette)) => palette.clone(),
+            (None, None) => Map::new().into(),
+        };
+
+        // add the palette correctly as nested table
+        let mut palette = Map::new();
+        palette.insert(String::from("palette"), palette_values);
+
+        // merge the theme into the parent theme
+        let theme = merge_toml_values(parent_theme_toml, theme_toml, 1);
+        // merge the before specially handled palette into the theme
+        merge_toml_values(theme, palette.into(), 1)
+    }
+
+    // Loads the theme data as `toml::Value`
+    fn load_toml(&self, path: PathBuf) -> Result<Value> {
+        let data = std::fs::read_to_string(path)?;
+        let value = toml::from_str(&data)?;
+
+        Ok(value)
+    }
+
+    /// Returns the path to the theme with the given name
+    ///
+    /// Ignores paths already visited and follows directory priority order.
+    fn path(&self, name: &str, visited_paths: &mut HashSet<PathBuf>) -> Result<PathBuf> {
+        let filename = format!("{}.toml", name);
+
+        let mut cycle_found = false; // track if there was a path, but it was in a cycle
+        self.theme_dirs
+            .iter()
+            .find_map(|dir| {
+                let path = dir.join(&filename);
+                if !path.exists() {
+                    None
+                } else if visited_paths.contains(&path) {
+                    // Avoiding cycle, continuing to look in lower priority directories
+                    cycle_found = true;
+                    None
+                } else {
+                    visited_paths.insert(path.clone());
+                    Some(path)
+                }
+            })
+            .ok_or_else(|| {
+                if cycle_found {
+                    anyhow!("Theme: cycle found in inheriting: {}", name)
+                } else {
+                    anyhow!("Theme: file not found for: {}", name)
+                }
+            })
     }
 
     pub fn default_theme(&self, true_color: bool) -> Theme {

@@ -321,15 +321,14 @@ pub mod completers {
     }
 
     pub fn theme(_editor: &Editor, input: &str) -> Vec<Completion> {
-        toml_filenames(
-            &[
-                helix_loader::runtime_dir().join("themes"),
-                helix_loader::config_dir().join("themes"),
-            ],
-            &["default", "base16_default"],
-            input,
-        )
-    }
+        let mut names = theme::Loader::read_names(&helix_loader::config_dir().join("themes"));
+        for rt_dir in helix_loader::runtime_dirs() {
+            names.extend(theme::Loader::read_names(&rt_dir.join("themes")));
+        }
+        names.push("default".into());
+        names.push("base16_default".into());
+        names.sort();
+        names.dedup();
 
     pub fn icons(_editor: &Editor, input: &str) -> Vec<Completion> {
         toml_filenames(
