@@ -443,26 +443,6 @@ impl<T: Item> Picker<T> {
             |_editor: &mut Context, _pattern: &str, _event: PromptEvent| {},
         );
 
-        let n = options
-            .first()
-            .map(|option| option.format(&editor_data, icons).cells.len())
-            .unwrap_or_default();
-        let max_lens = options.iter().fold(vec![0; n], |mut acc, option| {
-            let row = option.format(&editor_data, icons);
-            // maintain max for each column
-            for (acc, cell) in acc.iter_mut().zip(row.cells.iter()) {
-                let width = cell.content.width();
-                if width > *acc {
-                    *acc = width;
-                }
-            }
-            acc
-        });
-        let widths: Vec<_> = max_lens
-            .into_iter()
-            .map(|len| Constraint::Length(len as u16))
-            .collect();
-
         let mut picker = Self {
             options,
             editor_data,
@@ -475,7 +455,7 @@ impl<T: Item> Picker<T> {
             show_preview: true,
             callback_fn: Box::new(callback_fn),
             completion_height: 0,
-            widths,
+            widths: Vec::new(),
             has_icons: icons.is_some(),
         };
 
@@ -693,10 +673,10 @@ impl<T: Item + 'static> Component for Picker<T> {
         cx.editor.reset_idle_timer();
 
         match key_event {
-            shift!(Tab) | key!(Up) | ctrl!('p') | ctrl!('k') => {
+            shift!(Tab) | key!(Up) | ctrl!('p') => {
                 self.move_by(1, Direction::Backward);
             }
-            key!(Tab) | key!(Down) | ctrl!('n') | ctrl!('j') => {
+            key!(Tab) | key!(Down) | ctrl!('n') => {
                 self.move_by(1, Direction::Forward);
             }
             key!(PageDown) | ctrl!('d') => {
@@ -807,7 +787,7 @@ impl<T: Item + 'static> Component for Picker<T> {
             .map(|option| {
                 option.format(
                     &self.editor_data,
-                    cx.editor.config().icons.picker.then(|| &cx.editor.icons),
+                    cx.editor.config().icons.picker.then_some(&cx.editor.icons),
                 )
             })
             .map(|mut row| {
