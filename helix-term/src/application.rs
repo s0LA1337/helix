@@ -34,7 +34,8 @@ use crate::{
 use log::{debug, error, warn};
 use std::{
     collections::BTreeMap,
-    io::{stdin, stdout, Write},
+    io::{stdin, stdout},
+    path::Path,
     rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
@@ -139,10 +140,10 @@ impl Application {
             })
             .unwrap_or_else(|| theme_loader.default_theme(true_color));
 
-        let icons_loader = std::sync::Arc::new(icons::Loader::new(
-            &helix_loader::config_dir(),
-            &helix_loader::runtime_dir(),
-        ));
+        let mut theme_and_icons_parent_dirs = vec![helix_loader::config_dir()];
+        theme_and_icons_parent_dirs.extend(helix_loader::runtime_dirs().iter().cloned());
+        let theme_loader = std::sync::Arc::new(theme::Loader::new(&theme_and_icons_parent_dirs));
+        let icons_loader = std::sync::Arc::new(icons::Loader::new(&theme_and_icons_parent_dirs));
         let icons = config
             .icons
             .as_ref()

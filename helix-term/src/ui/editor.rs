@@ -1314,7 +1314,7 @@ impl EditorView {
 
         if completion.is_empty() {
             // skip if we got no completion results
-            return None;
+            return;
         }
 
         editor.last_completion = None;
@@ -1323,7 +1323,6 @@ impl EditorView {
         // TODO : propagate required size on resize to completion too
         completion.required_size((size.width, size.height));
         self.completion = Some(completion);
-        Some(area)
     }
 
     pub fn clear_completion(&mut self, editor: &mut Editor) {

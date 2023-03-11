@@ -825,7 +825,6 @@ impl Default for Config {
             color_modes: false,
             soft_wrap: SoftWrap::default(),
             rainbow_brackets: false,
-            completion_replace: false,
             popup_border: PopupBorderConfig::None,
             sticky_context: StickyContextConfig::default(),
             text_width: 80,

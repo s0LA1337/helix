@@ -6,7 +6,7 @@ use crate::{
     Align, Document, DocumentId, Theme, ViewId,
 };
 use helix_core::{
-    char_idx_at_visual_offset, doc_formatter::TextFormat, syntax::Highlight,
+    char_idx_at_visual_offset, doc_formatter::TextFormat, regex::Regex, syntax::Highlight,
     text_annotations::TextAnnotations, visual_offset_from_anchor, visual_offset_from_block,
     Position, RopeSlice, Selection, Transaction,
 };

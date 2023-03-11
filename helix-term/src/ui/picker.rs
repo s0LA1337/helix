@@ -426,6 +426,7 @@ pub struct Picker<T: Item> {
     widths: Vec<Constraint>,
 
     callback_fn: PickerCallback<T>,
+    has_icons: bool,
 }
 
 impl<T: Item> Picker<T> {
@@ -457,7 +458,7 @@ impl<T: Item> Picker<T> {
             }
             acc
         });
-        let widths = max_lens
+        let widths: Vec<_> = max_lens
             .into_iter()
             .map(|len| Constraint::Length(len as u16))
             .collect();
@@ -474,10 +475,11 @@ impl<T: Item> Picker<T> {
             show_preview: true,
             callback_fn: Box::new(callback_fn),
             completion_height: 0,
-            widths: Vec::new(),
+            widths,
+            has_icons: icons.is_some(),
         };
 
-        picker.calculate_column_widths();
+        picker.calculate_column_widths(icons);
 
         // scoring on empty input
         // TODO: just reuse score()
@@ -495,23 +497,23 @@ impl<T: Item> Picker<T> {
         picker
     }
 
-    pub fn set_options(&mut self, new_options: Vec<T>) {
+    pub fn set_options(&mut self, new_options: Vec<T>, icons: &'_ Icons) {
         self.options = new_options;
         self.cursor = 0;
         self.force_score();
-        self.calculate_column_widths();
+        self.calculate_column_widths(self.has_icons.then_some(icons));
     }
 
     /// Calculate the width constraints using the maximum widths of each column
     /// for the current options.
-    fn calculate_column_widths(&mut self) {
+    fn calculate_column_widths(&mut self, icons: Option<&'_ Icons>) {
         let n = self
             .options
             .first()
-            .map(|option| option.format(&self.editor_data).cells.len())
+            .map(|option| option.format(&self.editor_data, icons).cells.len())
             .unwrap_or_default();
         let max_lens = self.options.iter().fold(vec![0; n], |mut acc, option| {
-            let row = option.format(&self.editor_data);
+            let row = option.format(&self.editor_data, icons);
             // maintain max for each column
             for (acc, cell) in acc.iter_mut().zip(row.cells.iter()) {
                 let width = cell.content.width();
@@ -977,7 +979,7 @@ impl<T: Item + Send + 'static> Component for DynamicPicker<T> {
                         Some(overlay) => &mut overlay.content.file_picker.picker,
                         None => return,
                     };
-                    picker.set_options(new_options);
+                    picker.set_options(new_options, &editor.icons);
                     editor.reset_idle_timer();
                 }));
             anyhow::Ok(callback)

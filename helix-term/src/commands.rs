@@ -5,6 +5,7 @@ pub(crate) mod typed;
 pub use dap::*;
 use helix_vcs::Hunk;
 pub use lsp::*;
+use tokio::sync::oneshot;
 use tui::{
     text::{Span, Spans},
     widgets::Row,
@@ -4307,9 +4308,6 @@ pub fn completion(cx: &mut Context) {
                 return;
             }
             let size = compositor.size();
-            let signature_help_area = compositor
-                .find_id::<Popup<SignatureHelp>>(SignatureHelp::ID)
-                .map(|signature_help| signature_help.area(size, editor));
             let ui = compositor.find::<ui::EditorView>().unwrap();
             ui.set_completion(
                 editor,

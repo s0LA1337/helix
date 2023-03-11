@@ -1,5 +1,6 @@
 use crate::compositor::{Component, Context, Event, EventResult};
 use helix_view::{
+    document::SavePoint,
     editor::{CompleteAction, PopupBorderConfig},
     graphics::Margin,
     icons::Icons,
@@ -10,7 +11,7 @@ use tui::{buffer::Buffer as Surface, text::Span};
 
 use std::{borrow::Cow, sync::Arc};
 
-use helix_core::{chars, Change, Transaction};
+use helix_core::{Change, Transaction};
 use helix_view::{graphics::Rect, Document, Editor};
 
 use crate::commands;
@@ -547,9 +548,7 @@ impl Component for Completion {
         surface.clear_with(doc_area, background);
         let border_config = &cx.editor.config().popup_border;
 
-        if border_config == &PopupBorderConfig::All
-            || border_config == &PopupBorderConfig::Popup
-        {
+        if border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Popup {
             use tui::widgets::{Block, Borders, Widget};
             Widget::render(Block::default().borders(Borders::ALL), doc_area, surface);
         }

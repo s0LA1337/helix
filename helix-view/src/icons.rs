@@ -1,12 +1,9 @@
-use helix_loader::{merge_toml_values, toml_names_in_dir};
+use helix_loader::merge_toml_values;
 use log::warn;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::{
-    path::{Path, PathBuf},
-    str,
-};
+use std::collections::{HashMap, HashSet};
+use std::{path::PathBuf, str};
 use toml::Value;
 
 use crate::graphics::{Color, Style};
@@ -68,6 +65,7 @@ pub struct Icons {
     pub symbol_kind: Option<HashMap<String, Icon>>,
     pub breakpoint: Breakpoint,
     pub diff: Diff,
+    pub ui: Option<HashMap<String, Icon>>,
 }
 
 impl Icons {
@@ -109,6 +107,11 @@ impl Icons {
                 icon.style = Some(IconStyle::Default(Style::default()));
             }
         }
+        if let Some(ui_icons) = &mut self.ui {
+            for (_, icon) in ui_icons.iter_mut() {
+                icon.style = Some(IconStyle::Default(Style::default()));
+            }
+        }
         self.diagnostic.error.style = Some(IconStyle::Default(Style::default()));
         self.diagnostic.warning.style = Some(IconStyle::Default(Style::default()));
         self.diagnostic.hint.style = Some(IconStyle::Default(Style::default()));
@@ -135,11 +138,7 @@ impl Icons {
                     .map(|extension_or_filename| extension_or_filename.to_str())?
                     .and_then(|extension_or_filename| mime_type_icons.get(extension_or_filename))
             })
-            .or_else(|| {
-                self.symbol_kind
-                    .as_ref()
-                    .and_then(|symbol_kind_icons| symbol_kind_icons.get("file"))
-            })
+            .or_else(|| self.ui.as_ref().and_then(|ui_icons| ui_icons.get("file")))
     }
 }
 
@@ -202,26 +201,25 @@ pub fn hex_string_to_rgb(s: &str) -> Result<Color, String> {
 }
 
 pub struct Loader {
-    user_dir: PathBuf,
-    default_dir: PathBuf,
+    /// Icons directories to search from highest to lowest priority
+    icons_dirs: Vec<PathBuf>,
 }
 
-pub static DEFAULT_ICONS: Lazy<Value> = Lazy::new(|| {
+pub static DEFAULT_ICONS_DATA: Lazy<Value> = Lazy::new(|| {
     let bytes = include_bytes!("../../icons.toml");
-    toml::from_str(str::from_utf8(bytes).unwrap()).expect("Failed to parse default icons")
+    toml::from_str(str::from_utf8(bytes).unwrap()).expect("Failed to parse base 16 default theme")
 });
 
-pub static DEFAULT_ICONS_DATA: Lazy<Icons> = Lazy::new(|| Icons {
+pub static DEFAULT_ICONS: Lazy<Icons> = Lazy::new(|| Icons {
     name: "default".into(),
-    ..Icons::from(DEFAULT_ICONS.clone())
+    ..Icons::from(DEFAULT_ICONS_DATA.clone())
 });
 
 impl Loader {
     /// Creates a new loader that can load icons flavors from two directories.
-    pub fn new<P: AsRef<Path>>(user_dir: P, default_dir: P) -> Self {
+    pub fn new(dirs: &[PathBuf]) -> Self {
         Self {
-            user_dir: user_dir.as_ref().join("icons"),
-            default_dir: default_dir.as_ref().join("icons"),
+            icons_dirs: dirs.iter().map(|p| p.join("icons")).collect(),
         }
     }
 
@@ -236,7 +234,17 @@ impl Loader {
         if name == "default" {
             return Ok(self.default(theme));
         }
-        let mut icons: Icons = self.load_toml(name).map(Icons::from)?;
+
+        let mut visited_paths = HashSet::new();
+        let default_icons = HashMap::from([("default", &DEFAULT_ICONS_DATA)]);
+        let mut icons = helix_loader::load_inheritable_toml(
+            name,
+            &self.icons_dirs,
+            &mut visited_paths,
+            &default_icons,
+            Self::merge_icons,
+        )
+        .map(Icons::from)?;
 
         // Remove all styles when there is no truecolor support.
         // Not classy, but less cumbersome than trying to pass a parameter to a deserializer.
@@ -253,29 +261,14 @@ impl Loader {
         })
     }
 
-    fn load_toml(&self, name: &str) -> anyhow::Result<Value> {
-        let toml_from_file_stem = |file_stem: &str| match file_stem {
-            "default" => Ok(DEFAULT_ICONS.clone()),
-            _ => helix_loader::toml_from_file_stem(file_stem, &[&self.user_dir, &self.default_dir]),
-        };
-        helix_loader::flatten_inheritable_toml(name, toml_from_file_stem, Self::merge_toml, 3)
-    }
-
-    fn merge_toml(parent: Value, child: Value) -> Value {
+    fn merge_icons(parent: Value, child: Value) -> Value {
         merge_toml_values(parent, child, 3)
-    }
-
-    /// Lists all icons flavors names available in default and user directory
-    pub fn names(&self) -> Vec<String> {
-        let mut names = toml_names_in_dir(&self.user_dir);
-        names.extend(toml_names_in_dir(&self.default_dir));
-        names
     }
 
     /// Returns the default icon flavor.
     /// The `theme` is needed in order to load default styles for diagnostic icons.
     pub fn default(&self, theme: &Theme) -> Icons {
-        let mut icons = DEFAULT_ICONS_DATA.clone();
+        let mut icons = DEFAULT_ICONS.clone();
         icons.set_diagnostic_icons_base_style(theme);
         icons.set_symbolkind_icons_base_style(theme);
         icons
@@ -292,12 +285,12 @@ impl From<Value> for Icons {
                 Ok(icons) => icons,
                 Err(e) => {
                     log::error!("Failed to load icons, falling back to default: {}\n", e);
-                    DEFAULT_ICONS_DATA.clone()
+                    DEFAULT_ICONS.clone()
                 }
             }
         } else {
             warn!("Expected icons TOML value to be a table, found {:?}", value);
-            DEFAULT_ICONS_DATA.clone()
+            DEFAULT_ICONS.clone()
         }
     }
 }

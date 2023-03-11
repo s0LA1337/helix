@@ -4,7 +4,7 @@ use std::{
     str,
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use helix_core::hashmap;
 use helix_loader::merge_toml_values;
 use log::warn;
@@ -204,58 +204,6 @@ impl Loader {
     /// Returns the alternative 16-color default theme
     pub fn base16_default(&self) -> Theme {
         BASE16_DEFAULT_THEME.clone()
-    }
-
-    /// Load a theme first looking in the `user_dir` then in `default_dir`
-    pub fn load(&self, name: &str) -> Result<Theme> {
-        if name == "default" {
-            return Ok(self.default());
-        }
-        if name == "base16_default" {
-            return Ok(self.base16_default());
-        }
-
-        let theme = self.load_toml(name).map(Theme::from)?;
-
-        Ok(Theme {
-            name: name.into(),
-            ..theme
-        })
-    }
-
-    fn load_toml(&self, name: &str) -> Result<Value> {
-        let toml_from_file_stem = |file_stem: &str| match file_stem {
-            "default" => Ok(DEFAULT_THEME_DATA.clone()),
-            "base16_default" => Ok(BASE16_DEFAULT_THEME_DATA.clone()),
-            _ => helix_loader::toml_from_file_stem(file_stem, &[&self.user_dir, &self.default_dir]),
-        };
-
-        helix_loader::flatten_inheritable_toml(name, toml_from_file_stem, Self::merge_toml, 3)
-    }
-
-    fn merge_toml(parent: Value, child: Value) -> Value {
-        let parent_palette = parent.get("palette");
-        let palette = child.get("palette");
-
-        // handle the table seperately since it needs a `merge_depth` of 2
-        // this would conflict with the rest of the flavor merge strategy
-        let palette_values = match (parent_palette, palette) {
-            (Some(parent_palette), Some(palette)) => {
-                merge_toml_values(parent_palette.clone(), palette.clone(), 2)
-            }
-            (Some(parent_palette), None) => parent_palette.clone(),
-            (None, Some(palette)) => palette.clone(),
-            (None, None) => Map::new().into(),
-        };
-
-        // add the palette correctly as nested table
-        let mut palette = Map::new();
-        palette.insert(String::from("palette"), palette_values);
-
-        // merge the flavor into the parent flavor
-        let flavor = merge_toml_values(parent, child, 1);
-        // merge the before specially handled palette into the flavor
-        merge_toml_values(flavor, palette.into(), 1)
     }
 }
 
