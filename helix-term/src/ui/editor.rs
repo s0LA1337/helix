@@ -17,9 +17,9 @@ use helix_core::{
     movement::Direction,
     syntax::{self, HighlightEvent, RopeProvider},
     text_annotations::TextAnnotations,
-    tree_sitter::QueryCursor,
+    tree_sitter::{QueryCursor, QueryMatches},
     unicode::width::UnicodeWidthStr,
-    visual_offset_from_block, Position, Range, Selection, Transaction,
+    visual_offset_from_block, Position, Range, RopeSlice, Selection, Transaction,
 };
 use helix_view::{
     document::{Mode, SavePoint, SCRATCH_BUFFER_NAME},
@@ -40,6 +40,7 @@ use super::{document::LineDecoration, lsp::SignatureHelp};
 pub struct StickyNode {
     visual_line: u16,
     line_nr: usize,
+    byte_range: std::ops::Range<usize>,
     indicator: Option<String>,
     top_first_byte: usize,
 }
@@ -750,66 +751,140 @@ impl EditorView {
         translated_positions: &mut [TranslatedPosition],
         theme: &Theme,
     ) {
-        if context.is_none() {
-            return;
-        }
+        if let Some(context) = context {
+            let text = doc.text().slice(..);
+            let viewport = view.inner_area(doc);
 
-        let context = context.as_deref().expect("context has value");
+            // define sticky context styles
+            let context_style = theme.get("ui.virtual.sticky.context");
+            let indicator_style = theme.get("ui.virtual.sticky.indicator");
 
-        let text = doc.text().slice(..);
-        let viewport = view.inner_area(doc);
+            let mut context_area = viewport;
+            context_area.height = 1;
 
-        // TODO: this probably needs it's own style, although it seems to work well even with cursorline
-        let context_style = theme.get("ui.virtual.sticky-context");
-        let indicator_style = context_style.patch(theme.get("ui.linenr"));
+            for node in context {
+                surface.clear_with(context_area, context_style);
 
-        let mut context_area = viewport;
-        context_area.height = 1;
+                let mut new_offset = view.offset;
+                let mut line_context_area = context_area;
 
-        for node in context {
-            surface.clear_with(context_area, context_style);
+                if let Some(indicator) = node.indicator.as_deref() {
+                    // set the indicator
+                    surface.set_stringn(
+                        line_context_area.x,
+                        line_context_area.y,
+                        indicator,
+                        indicator.len(),
+                        indicator_style,
+                    );
+                    continue;
+                }
 
-            if let Some(indicator) = node.indicator.as_deref() {
-                // set the indicator
-                surface.set_stringn(
-                    context_area.x,
-                    context_area.y,
-                    indicator,
-                    indicator.len(),
-                    indicator_style,
+                // get the len of bytes of the text that will be written (the "definition" line)
+                let already_written = text.line(node.line_nr).len_bytes() as u16;
+
+                // draw the "remaining" part of a signature first, so that it be drawn over
+                if node.byte_range.start < node.byte_range.end {
+                    let first_line = text.byte_to_line(node.byte_range.start);
+                    let last_line = text.byte_to_line(node.byte_range.end);
+
+                    // if the definition of the function contains multiple lines
+                    // e.g. a parameter list of 6+ parameters, the delta will be bigger than 1
+                    if last_line.checked_sub(first_line) > Some(1) {
+                        let overdraw_offset = text
+                            .line(last_line)
+                            .chars()
+                            .take_while(|c| c.is_whitespace())
+                            .count()
+                            + 1;
+
+                        // calculation of the correct space on where the end of the signature
+                        // should be drawn at
+                        let mut additional_area = line_context_area;
+                        additional_area.x += already_written.saturating_sub(overdraw_offset as u16);
+                        additional_area.width -= already_written;
+
+                        let return_anchor = node.byte_range.end;
+                        let highlights = Self::doc_syntax_highlights(doc, return_anchor, 1, theme);
+
+                        let mut renderer = TextRenderer::new(
+                            surface,
+                            doc,
+                            theme,
+                            view.offset.horizontal_offset,
+                            additional_area,
+                        );
+
+                        new_offset.anchor = return_anchor;
+
+                        render_text(
+                            &mut renderer,
+                            text,
+                            new_offset,
+                            &doc.text_format(additional_area.width, Some(theme)),
+                            doc_annotations,
+                            highlights,
+                            theme,
+                            line_decoration,
+                            translated_positions,
+                        );
+                    }
+                }
+
+                let line_num_anchor = text.line_to_byte(node.line_nr);
+
+                // get all highlights from the latest point
+                let highlights = Self::doc_syntax_highlights(doc, line_num_anchor, 1, theme);
+
+                let mut renderer = TextRenderer::new(
+                    surface,
+                    doc,
+                    theme,
+                    view.offset.horizontal_offset,
+                    line_context_area,
                 );
-                continue;
+                new_offset.anchor = line_num_anchor;
+
+                // limit the width to its size - 1, so that it won't draw trailing whitespace characters
+                line_context_area.width = already_written - 1;
+
+                render_text(
+                    &mut renderer,
+                    text,
+                    new_offset,
+                    &doc.text_format(line_context_area.width, Some(theme)),
+                    doc_annotations,
+                    highlights,
+                    theme,
+                    line_decoration,
+                    translated_positions,
+                );
+
+                // next node
+                context_area.y += 1;
             }
-
-            let line_num_anchor = text.line_to_char(node.line_nr);
-
-            // get all highlights from the latest point
-            let highlights = Self::doc_syntax_highlights(doc, line_num_anchor, 1, theme);
-
-            let mut renderer = TextRenderer::new(
-                surface,
-                doc,
-                theme,
-                view.offset.horizontal_offset,
-                context_area,
-            );
-            let mut new_offset = view.offset;
-            new_offset.anchor = line_num_anchor;
-
-            render_text(
-                &mut renderer,
-                text,
-                new_offset,
-                &doc.text_format(context_area.width, Some(theme)),
-                doc_annotations,
-                highlights,
-                theme,
-                line_decoration,
-                translated_positions,
-            );
-
-            context_area.y += 1;
         }
+    }
+
+    fn get_node_range<'a>(
+        text: &RopeSlice,
+        query_nodes: QueryMatches<'a, 'a, RopeProvider<'a>>,
+        start_index: u32,
+        end_index: u32,
+    ) -> Option<std::ops::Range<usize>> {
+        query_nodes
+            .flat_map(move |qnode| {
+                let context_nodes: Vec<_> = qnode.nodes_for_capture_index(start_index).collect();
+                let end_nodes: Vec<_> = qnode.nodes_for_capture_index(end_index).collect();
+                context_nodes
+                    .into_iter()
+                    .zip(end_nodes.into_iter())
+                    .map(|(c, e)| (c.byte_range(), e.start_byte()))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|(context, end)| context.contains(&end))
+            .map(|(context, end)| context.start..end)
+            .next()
     }
 
     /// Calculates the sticky nodes
@@ -851,6 +926,12 @@ impl EditorView {
             .language_config()
             .and_then(|lang| lang.context_query())?;
 
+        let start_index = context_nodes.query.capture_index_for_name("context")?;
+        let end_index = context_nodes
+            .query
+            .capture_index_for_name("context.end")
+            .unwrap_or_else(|| start_index);
+
         let mut cursor_parent = tree
             .root_node()
             .descendant_for_byte_range(cursor_byte, cursor_byte)
@@ -891,21 +972,22 @@ impl EditorView {
 
             let mut cursor = QueryCursor::new();
             let query = &context_nodes.query;
-            let query_nodes = cursor.matches(query, node, RopeProvider(text));
+            let mut query_nodes = cursor.matches(query, node, RopeProvider(text));
 
-            let is_in_range = query_nodes
-                .flat_map(|qnode| {
-                    qnode
-                        .captures
-                        .iter()
-                        .map(|capture| capture.node.byte_range())
-                })
-                .any(|query_range| query_range.contains(&node.start_byte()));
+            let is_in_range = query_nodes.any(|qnode| {
+                qnode
+                    .captures
+                    .iter()
+                    .any(|capture| capture.node.byte_range().contains(&node.byte_range().start))
+            });
 
             if is_in_range {
+                let node_byte_range =
+                    Self::get_node_range(&text, query_nodes, start_index, end_index);
                 context.push(StickyNode {
                     visual_line: 0, // with sorting it will be done
                     line_nr: line,
+                    byte_range: node_byte_range.unwrap_or_else(|| 0..0),
                     indicator: None,
                     top_first_byte,
                 });
@@ -963,6 +1045,7 @@ impl EditorView {
             context.push(StickyNode {
                 visual_line: context.len() as u16,
                 line_nr: 0,
+                byte_range: 0..0,
                 indicator: Some(str),
                 top_first_byte,
             })

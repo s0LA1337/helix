@@ -48,7 +48,8 @@
 "ui.text.focus" = { fg = "cyan" }
 "ui.virtual.ruler" = { bg = "foreground_gutter" }
 "ui.virtual.whitespace" = { fg = "foreground_gutter" }
-"ui.virtual.sticky-context" = { bg = "background_menu" }
+"ui.virtual.sticky.context" = { bg = "background_menu" }
+"ui.virtual.sticky.indicator" = { fg = "comment", bg = "background_menu" }
 "ui.window" = { fg = "black" }
 
 "error" = { fg = "red" }
