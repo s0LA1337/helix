@@ -16,7 +16,7 @@
 (closure_expression) @context
 
 (function_item
-  ("{" @context.end)
+  (block) @context.end
 ) @context
 
 (impl_item) @context
@@ -27,4 +27,3 @@
 
 (enum_item) @context
 
-(mod_item) @context
