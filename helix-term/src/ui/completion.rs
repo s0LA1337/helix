@@ -1,7 +1,8 @@
 use crate::compositor::{Component, Context, Event, EventResult};
 use helix_view::{
     document::SavePoint,
-    editor::CompleteAction,
+    editor::{CompleteAction, PopupBorderConfig},
+    graphics::Margin,
     theme::{Modifier, Style},
     ViewId,
 };
@@ -288,9 +289,22 @@ impl Completion {
                 }
             };
         });
+
+        let border_config = &editor.config().popup_border;
+
+        let margin = if border_config == &PopupBorderConfig::All
+            || border_config == &PopupBorderConfig::Menu
+        {
+            Margin::vertical(1)
+        } else {
+            Margin::none()
+        };
+
         let popup = Popup::new(Self::ID, menu)
             .with_scrollbar(false)
-            .ignore_escape_key(true);
+            .ignore_escape_key(true)
+            .margin(margin);
+
         let mut completion = Self {
             popup,
             start_offset,
@@ -525,6 +539,14 @@ impl Component for Completion {
         // clear area
         let background = cx.editor.theme.get("ui.popup");
         surface.clear_with(doc_area, background);
+
+        let border_config = &cx.editor.config().popup_border;
+
+        if border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Popup {
+            use tui::widgets::{Block, Borders, Widget};
+            Widget::render(Block::default().borders(Borders::ALL), doc_area, surface);
+        }
+
         markdown_doc.render(doc_area, surface, cx);
     }
 }

@@ -3,10 +3,14 @@ use crate::{
     compositor::{Callback, Component, Context, Event, EventResult},
     ctrl, key,
 };
-use tui::buffer::Buffer as Surface;
+use tui::{
+    buffer::Buffer as Surface,
+    widgets::{Block, Borders, Widget},
+};
 
 use helix_core::Position;
 use helix_view::{
+    editor::PopupBorderConfig,
     graphics::{Margin, Rect},
     Editor,
 };
@@ -252,13 +256,25 @@ impl<T: Component> Component for Popup<T> {
         let background = cx.editor.theme.get("ui.popup");
         surface.clear_with(area, background);
 
-        let inner = area.inner(&self.margin);
+        let border_config = &cx.editor.config().popup_border;
+
+        let render_borders =
+            border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Popup;
+
+        let (inner, border) = if render_borders {
+            Widget::render(Block::default().borders(Borders::ALL), area, surface);
+            (area, 1)
+        } else {
+            let inner = area.inner(&self.margin);
+            (inner, 0)
+        };
+
         self.contents.render(inner, surface, cx);
 
         // render scrollbar if contents do not fit
         if self.has_scrollbar {
-            let win_height = inner.height as usize;
-            let len = self.child_size.1 as usize;
+            let win_height = inner.height as usize - 2 * border;
+            let len = self.child_size.1 as usize - 2 * border;
             let fits = len <= win_height;
             let scroll = self.scroll;
             let scroll_style = cx.editor.theme.get("ui.menu.scroll");
@@ -274,14 +290,17 @@ impl<T: Component> Component for Popup<T> {
 
                 let mut cell;
                 for i in 0..win_height {
-                    cell = &mut surface[(inner.right() - 1, inner.top() + i as u16)];
-
-                    cell.set_symbol("▐"); // right half block
+                    cell = &mut surface[(inner.right() - 1, inner.top() + (border + i) as u16)];
 
                     if scroll_line <= i && i < scroll_line + scroll_height {
                         // Draw scroll thumb
+                        if render_borders {
+                            cell.set_symbol("▌"); // left half block
+                        } else {
+                            cell.set_symbol("▐"); // right half block
+                        }
                         cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
-                    } else {
+                    } else if !render_borders {
                         // Draw scroll track
                         cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
                     }
