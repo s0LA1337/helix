@@ -1,4 +1,5 @@
 use helix_core::hashmap;
+use helix_term::config::KeymapConfig;
 use helix_term::keymap;
 use helix_term::keymap::Keymap;
 use helix_view::document::Mode;
@@ -93,7 +94,9 @@ async fn test_move_parent_node_end() -> anyhow::Result<()> {
             AppBuilder::new()
                 .with_file("foo.rs", None)
                 .with_config(Config {
-                    keys: keymap.clone(),
+                    keys: KeymapConfig {
+                        bindings: keymap.clone(),
+                    },
                     ..helpers::test_config()
                 }),
             test,
@@ -234,7 +237,9 @@ async fn test_move_parent_node_start() -> anyhow::Result<()> {
             AppBuilder::new()
                 .with_file("foo.rs", None)
                 .with_config(Config {
-                    keys: keymap.clone(),
+                    keys: KeymapConfig {
+                        bindings: keymap.clone(),
+                    },
                     ..helpers::test_config()
                 }),
             test,

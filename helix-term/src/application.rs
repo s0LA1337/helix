@@ -31,11 +31,14 @@ use crate::{
 use log::{debug, error, warn};
 use std::{
     collections::btree_map::Entry,
-    io::{stdin, stdout},
+    io::stdin,
     path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
+
+#[cfg(not(feature = "integration"))]
+use std::io::stdout;
 
 use anyhow::{Context, Error};
 
@@ -154,8 +157,9 @@ impl Application {
         );
 
         let keys = Box::new(Map::new(Arc::clone(&config), |config: &Config| {
-            &config.keys
+            &config.keys.bindings
         }));
+
         let editor_view = Box::new(ui::EditorView::new(Keymaps::new(keys)));
         compositor.push(editor_view);
 

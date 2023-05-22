@@ -9,10 +9,10 @@ use std::fs;
 use std::io::Error as IOError;
 use toml::de::Error as TomlError;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Config {
     pub theme: Option<String>,
-    pub keys: HashMap<Mode, Keymap>,
+    pub keys: KeymapConfig,
     pub editor: helix_view::editor::Config,
 }
 
@@ -20,16 +20,20 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct ConfigRaw {
     pub theme: Option<String>,
-    pub keys: Option<HashMap<Mode, Keymap>>,
+    pub keys: Option<KeymapConfig>,
     pub editor: Option<toml::Value>,
 }
 
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            theme: None,
-            keys: keymap::default(),
-            editor: helix_view::editor::Config::default(),
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct KeymapConfig {
+    #[serde(flatten)]
+    pub bindings: HashMap<Mode, Keymap>,
+}
+
+impl Default for KeymapConfig {
+    fn default() -> KeymapConfig {
+        KeymapConfig {
+            bindings: keymap::default(),
         }
     }
 }
@@ -62,15 +66,25 @@ impl Config {
     ) -> Result<Config, ConfigLoadError> {
         let global_config: Result<ConfigRaw, ConfigLoadError> =
             global.and_then(|file| toml::from_str(&file).map_err(ConfigLoadError::BadConfig));
+
         let local_config: Result<ConfigRaw, ConfigLoadError> =
             local.and_then(|file| toml::from_str(&file).map_err(ConfigLoadError::BadConfig));
+
         let res = match (global_config, local_config) {
             (Ok(global), Ok(local)) => {
                 let mut keys = keymap::default();
-                if let Some(global_keys) = global.keys {
+
+                if let Some(KeymapConfig {
+                    bindings: global_keys,
+                }) = global.keys
+                {
                     merge_keys(&mut keys, global_keys)
                 }
-                if let Some(local_keys) = local.keys {
+
+                if let Some(KeymapConfig {
+                    bindings: local_keys,
+                }) = local.keys
+                {
                     merge_keys(&mut keys, local_keys)
                 }
 
@@ -86,7 +100,7 @@ impl Config {
 
                 Config {
                     theme: local.theme.or(global.theme),
-                    keys,
+                    keys: KeymapConfig { bindings: keys },
                     editor,
                 }
             }
@@ -97,12 +111,17 @@ impl Config {
             }
             (Ok(config), Err(_)) | (Err(_), Ok(config)) => {
                 let mut keys = keymap::default();
-                if let Some(keymap) = config.keys {
-                    merge_keys(&mut keys, keymap);
+
+                if let Some(KeymapConfig {
+                    bindings: config_keys,
+                }) = config.keys
+                {
+                    merge_keys(&mut keys, config_keys)
                 }
+
                 Config {
                     theme: config.theme,
-                    keys,
+                    keys: KeymapConfig { bindings: keys },
                     editor: config.editor.map_or_else(
                         || Ok(helix_view::editor::Config::default()),
                         |val| val.try_into().map_err(ConfigLoadError::BadConfig),
@@ -168,7 +187,7 @@ mod tests {
         assert_eq!(
             Config::load_test(sample_keymaps),
             Config {
-                keys,
+                keys: KeymapConfig { bindings: keys },
                 ..Default::default()
             }
         );
@@ -177,11 +196,11 @@ mod tests {
     #[test]
     fn keys_resolve_to_correct_defaults() {
         // From serde default
-        let default_keys = Config::load_test("").keys;
+        let default_keys = Config::load_test("").keys.bindings;
         assert_eq!(default_keys, keymap::default());
 
         // From the Default trait
-        let default_keys = Config::default().keys;
+        let default_keys = Config::default().keys.bindings;
         assert_eq!(default_keys, keymap::default());
     }
 }
