@@ -2458,6 +2458,10 @@ fn insert_mode(cx: &mut Context) {
         .transform(|range| Range::new(range.to(), range.from()));
 
     doc.set_selection(view.id, selection);
+
+    // [TODO] temporary workaround until we're not using the idle timer to
+    //        trigger auto completions any more
+    cx.editor.clear_idle_timer();
 }
 
 // inserts at the end of each selection
@@ -4570,6 +4574,10 @@ fn move_node_bound_impl(cx: &mut Context, dir: Direction, movement: Movement) {
             );
 
             doc.set_selection(view.id, selection);
+
+            // [TODO] temporary workaround until we're not using the idle timer to
+            //        trigger auto completions any more
+            editor.clear_idle_timer();
         }
     };
 
