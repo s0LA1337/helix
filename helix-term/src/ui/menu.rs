@@ -5,6 +5,10 @@ use crate::{
     ctrl, key, shift,
 };
 use tui::{buffer::Buffer as Surface, text::Span, widgets::Table};
+use tui::{
+    buffer::Buffer as Surface,
+    widgets::{Block, Borders, Table, Widget},
+};
 
 pub use tui::widgets::{Cell, Row};
 
@@ -12,6 +16,11 @@ use fuzzy_matcher::skim::SkimMatcherV2 as Matcher;
 use fuzzy_matcher::FuzzyMatcher;
 
 use helix_view::{graphics::Rect, icons::Icons, Editor};
+use helix_view::{
+    editor::PopupBorderConfig,
+    graphics::{Margin, Rect},
+    Editor,
+};
 use tui::layout::Constraint;
 
 pub trait Item {
@@ -314,6 +323,18 @@ impl<T: Item + 'static> Component for Menu<T> {
         let selected = theme.get("ui.menu.selected");
         surface.clear_with(area, style);
 
+        let border_config = &cx.editor.config().popup_border;
+
+        let render_borders =
+            border_config == &PopupBorderConfig::All || border_config == &PopupBorderConfig::Menu;
+
+        let inner = if render_borders {
+            Widget::render(Block::default().borders(Borders::ALL), area, surface);
+            area.inner(&Margin::vertical(1))
+        } else {
+            area
+        };
+
         let scroll = self.scroll;
 
         let options: Vec<_> = self
@@ -327,7 +348,7 @@ impl<T: Item + 'static> Component for Menu<T> {
 
         let len = options.len();
 
-        let win_height = area.height as usize;
+        let win_height = inner.height as usize;
 
         const fn div_ceil(a: usize, b: usize) -> usize {
             (a + b - 1) / b
@@ -345,7 +366,7 @@ impl<T: Item + 'static> Component for Menu<T> {
         use tui::widgets::TableState;
 
         table.render_table(
-            area.clip_left(Self::LEFT_PADDING as u16).clip_right(1),
+            inner.clip_left(Self::LEFT_PADDING as u16).clip_right(1),
             surface,
             &mut TableState {
                 offset: scroll,
@@ -354,15 +375,17 @@ impl<T: Item + 'static> Component for Menu<T> {
             false,
         );
 
-        if let Some(cursor) = self.cursor {
-            let offset_from_top = cursor - scroll;
-            let left = &mut surface[(area.left(), area.y + offset_from_top as u16)];
-            left.set_style(selected);
-            let right = &mut surface[(
-                area.right().saturating_sub(1),
-                area.y + offset_from_top as u16,
-            )];
-            right.set_style(selected);
+        if !render_borders {
+            if let Some(cursor) = self.cursor {
+                let offset_from_top = cursor - scroll;
+                let left = &mut surface[(inner.left(), inner.y + offset_from_top as u16)];
+                left.set_style(selected);
+                let right = &mut surface[(
+                    inner.right().saturating_sub(1),
+                    inner.y + offset_from_top as u16,
+                )];
+                right.set_style(selected);
+            }
         }
 
         let fits = len <= win_height;
@@ -375,14 +398,17 @@ impl<T: Item + 'static> Component for Menu<T> {
 
             let mut cell;
             for i in 0..win_height {
-                cell = &mut surface[(area.right() - 1, area.top() + i as u16)];
-
-                cell.set_symbol("▐"); // right half block
+                cell = &mut surface[(inner.right() - 1, inner.top() + i as u16)];
 
                 if scroll_line <= i && i < scroll_line + scroll_height {
                     // Draw scroll thumb
+                    if render_borders {
+                        cell.set_symbol("▌"); // left half block
+                    } else {
+                        cell.set_symbol("▐"); // right half block
+                    }
                     cell.set_fg(scroll_style.fg.unwrap_or(helix_view::theme::Color::Reset));
-                } else {
+                } else if !render_borders {
                     // Draw scroll track
                     cell.set_fg(scroll_style.bg.unwrap_or(helix_view::theme::Color::Reset));
                 }
