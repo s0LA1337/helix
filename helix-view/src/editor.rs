@@ -288,6 +288,7 @@ pub struct Config {
     pub workspace_lsp_roots: Vec<PathBuf>,
     /// Contextual information on top of the viewport
     pub sticky_context: StickyContextConfig,
+    pub rainbow_brackets: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
