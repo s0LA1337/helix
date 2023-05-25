@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     str,
 };
@@ -37,66 +37,78 @@ pub static BASE16_DEFAULT_THEME: Lazy<Theme> = Lazy::new(|| Theme {
 
 #[derive(Clone, Debug)]
 pub struct Loader {
-    user_dir: PathBuf,
-    default_dir: PathBuf,
+    /// Theme directories to search from highest to lowest priority
+    theme_dirs: Vec<PathBuf>,
 }
 impl Loader {
-    /// Creates a new loader that can load themes from two directories.
-    pub fn new<P: AsRef<Path>>(user_dir: P, default_dir: P) -> Self {
+    /// Creates a new loader that can load themes from multiple directories.
+    ///
+    /// The provided directories should be ordered from highest to lowest priority.
+    /// The directories will have their "themes" subdirectory searched.
+    pub fn new(dirs: &[PathBuf]) -> Self {
         Self {
-            user_dir: user_dir.as_ref().join("themes"),
-            default_dir: default_dir.as_ref().join("themes"),
+            theme_dirs: dirs.iter().map(|p| p.join("themes")).collect(),
         }
     }
 
-    /// Loads a theme first looking in the `user_dir` then in `default_dir`
+    /// Loads a theme searching directories in priority order.
     pub fn load(&self, name: &str) -> Result<Theme> {
+        let (theme, warnings) = self.load_with_warnings(name)?;
+
+        for warning in warnings {
+            warn!("Theme '{}': {}", name, warning);
+        }
+
+        Ok(theme)
+    }
+
+    /// Loads a theme searching directories in priority order, returning any warnings
+    pub fn load_with_warnings(&self, name: &str) -> Result<(Theme, Vec<String>)> {
         if name == "default" {
-            return Ok(self.default());
+            return Ok((self.default(), Vec::new()));
         }
         if name == "base16_default" {
-            return Ok(self.base16_default());
+            return Ok((self.base16_default(), Vec::new()));
         }
 
-        let theme = self.load_theme(name, name, false).map(Theme::from)?;
+        let mut visited_paths = HashSet::new();
+        let (theme, warnings) = self
+            .load_theme(name, &mut visited_paths)
+            .map(Theme::from_toml)?;
 
-        Ok(Theme {
+        let theme = Theme {
             name: name.into(),
             ..theme
-        })
+        };
+        Ok((theme, warnings))
     }
 
-    // load the theme and its parent recursively and merge them
-    // `base_theme_name` is the theme from the config.toml,
-    // used to prevent some circular loading scenarios
-    fn load_theme(
-        &self,
-        name: &str,
-        base_theme_name: &str,
-        only_default_dir: bool,
-    ) -> Result<Value> {
-        let path = self.path(name, only_default_dir);
+    /// Recursively load a theme, merging with any inherited parent themes.
+    ///
+    /// The paths that have been visited in the inheritance hierarchy are tracked
+    /// to detect and avoid cycling.
+    ///
+    /// It is possible for one file to inherit from another file with the same name
+    /// so long as the second file is in a themes directory with lower priority.
+    /// However, it is not recommended that users do this as it will make tracing
+    /// errors more difficult.
+    fn load_theme(&self, name: &str, visited_paths: &mut HashSet<PathBuf>) -> Result<Value> {
+        let path = self.path(name, visited_paths)?;
+
         let theme_toml = self.load_toml(path)?;
 
         let inherits = theme_toml.get("inherits");
 
         let theme_toml = if let Some(parent_theme_name) = inherits {
             let parent_theme_name = parent_theme_name.as_str().ok_or_else(|| {
-                anyhow!(
-                    "Theme: expected 'inherits' to be a string: {}",
-                    parent_theme_name
-                )
+                anyhow!("Expected 'inherits' to be a string: {}", parent_theme_name)
             })?;
 
             let parent_theme_toml = match parent_theme_name {
                 // load default themes's toml from const.
                 "default" => DEFAULT_THEME_DATA.clone(),
                 "base16_default" => BASE16_DEFAULT_THEME_DATA.clone(),
-                _ => self.load_theme(
-                    parent_theme_name,
-                    base_theme_name,
-                    base_theme_name == parent_theme_name,
-                )?,
+                _ => self.load_theme(parent_theme_name, visited_paths)?,
             };
 
             self.merge_themes(parent_theme_toml, theme_toml)
@@ -127,7 +139,7 @@ impl Loader {
         let parent_palette = parent_theme_toml.get("palette");
         let palette = theme_toml.get("palette");
 
-        // handle the table seperately since it needs a `merge_depth` of 2
+        // handle the table separately since it needs a `merge_depth` of 2
         // this would conflict with the rest of the theme merge strategy
         let palette_values = match (parent_palette, palette) {
             (Some(parent_palette), Some(palette)) => {
@@ -148,7 +160,7 @@ impl Loader {
         merge_toml_values(theme, palette.into(), 1)
     }
 
-    // Loads the theme data as `toml::Value` first from the user_dir then in default_dir
+    // Loads the theme data as `toml::Value`
     fn load_toml(&self, path: PathBuf) -> Result<Value> {
         let data = std::fs::read_to_string(path)?;
         let value = toml::from_str(&data)?;
@@ -156,25 +168,35 @@ impl Loader {
         Ok(value)
     }
 
-    // Returns the path to the theme with the name
-    // With `only_default_dir` as false the path will first search for the user path
-    // disabled it ignores the user path and returns only the default path
-    fn path(&self, name: &str, only_default_dir: bool) -> PathBuf {
+    /// Returns the path to the theme with the given name
+    ///
+    /// Ignores paths already visited and follows directory priority order.
+    fn path(&self, name: &str, visited_paths: &mut HashSet<PathBuf>) -> Result<PathBuf> {
         let filename = format!("{}.toml", name);
 
-        let user_path = self.user_dir.join(&filename);
-        if !only_default_dir && user_path.exists() {
-            user_path
-        } else {
-            self.default_dir.join(filename)
-        }
-    }
-
-    /// Lists all theme names available in default and user directory
-    pub fn names(&self) -> Vec<String> {
-        let mut names = Self::read_names(&self.user_dir);
-        names.extend(Self::read_names(&self.default_dir));
-        names
+        let mut cycle_found = false; // track if there was a path, but it was in a cycle
+        self.theme_dirs
+            .iter()
+            .find_map(|dir| {
+                let path = dir.join(&filename);
+                if !path.exists() {
+                    None
+                } else if visited_paths.contains(&path) {
+                    // Avoiding cycle, continuing to look in lower priority directories
+                    cycle_found = true;
+                    None
+                } else {
+                    visited_paths.insert(path.clone());
+                    Some(path)
+                }
+            })
+            .ok_or_else(|| {
+                if cycle_found {
+                    anyhow!("Cycle found in inheriting: {}", name)
+                } else {
+                    anyhow!("File not found for: {}", name)
+                }
+            })
     }
 
     pub fn default_theme(&self, true_color: bool) -> Theme {
@@ -210,20 +232,11 @@ pub struct Theme {
 
 impl From<Value> for Theme {
     fn from(value: Value) -> Self {
-        if let Value::Table(table) = value {
-            let (styles, scopes, highlights, rainbow_length) = build_theme_values(table);
-
-            Self {
-                styles,
-                scopes,
-                highlights,
-                rainbow_length,
-                ..Default::default()
-            }
-        } else {
-            warn!("Expected theme TOML value to be a table, found {:?}", value);
-            Default::default()
+        let (theme, warnings) = Theme::from_toml(value);
+        for warning in warnings {
+            warn!("{}", warning);
         }
+        theme
     }
 }
 
@@ -233,82 +246,23 @@ impl<'de> Deserialize<'de> for Theme {
         D: Deserializer<'de>,
     {
         let values = Map::<String, Value>::deserialize(deserializer)?;
-
-        let (styles, scopes, highlights, rainbow_length) = build_theme_values(values);
-
-        Ok(Self {
-            styles,
-            scopes,
-            highlights,
-            rainbow_length,
-            ..Default::default()
-        })
-    }
-}
-
-fn build_theme_values(
-    mut values: Map<String, Value>,
-) -> (HashMap<String, Style>, Vec<String>, Vec<Style>, usize) {
-    let mut styles = HashMap::new();
-    let mut scopes = Vec::new();
-    let mut highlights = Vec::new();
-    let mut rainbow_length = 0;
-
-    // TODO: alert user of parsing failures in editor
-    let palette = values
-        .remove("palette")
-        .map(|value| {
-            ThemePalette::try_from(value).unwrap_or_else(|err| {
-                warn!("{}", err);
-                ThemePalette::default()
-            })
-        })
-        .unwrap_or_default();
-    // remove inherits from value to prevent errors
-    let _ = values.remove("inherits");
-    styles.reserve(values.len());
-    scopes.reserve(values.len());
-    highlights.reserve(values.len());
-
-    for (i, style) in values
-        .remove("rainbow")
-        .and_then(|value| match palette.parse_style_array(value) {
-            Ok(styles) => Some(styles),
-            Err(err) => {
-                warn!("{}", err);
-                None
-            }
-        })
-        .unwrap_or_else(default_rainbow)
-        .iter()
-        .enumerate()
-    {
-        let name = format!("rainbow.{}", i);
-        styles.insert(name.clone(), *style);
-        scopes.push(name);
-        highlights.push(*style);
-        rainbow_length += 1;
-    }
-
-    for (name, style_value) in values {
-        let mut style = Style::default();
-        if let Err(err) = palette.parse_style(&mut style, style_value) {
-            warn!("{}", err);
+        let (theme, warnings) = Theme::from_keys(values);
+        for warning in warnings {
+            warn!("{}", warning);
         }
-
-        // these are used both as UI and as highlights
-        styles.insert(name.clone(), style);
-        scopes.push(name);
-        highlights.push(style);
+        Ok(theme)
     }
-
-    (styles, scopes, highlights, rainbow_length)
 }
 
 impl Theme {
     #[inline]
     pub fn highlight(&self, index: usize) -> Style {
         self.highlights[index]
+    }
+
+    #[inline]
+    pub fn scope(&self, index: usize) -> &str {
+        &self.scopes[index]
     }
 
     pub fn name(&self) -> &str {
@@ -371,6 +325,82 @@ impl Theme {
     pub fn get_rainbow(&self, index: usize) -> Style {
         self.highlights[index % self.rainbow_length]
     }
+
+    fn from_toml(value: Value) -> (Self, Vec<String>) {
+        if let Value::Table(table) = value {
+            Theme::from_keys(table)
+        } else {
+            warn!("Expected theme TOML value to be a table, found {:?}", value);
+            Default::default()
+        }
+    }
+
+    fn from_keys(mut values: Map<String, Value>) -> (Self, Vec<String>) {
+        let mut styles = HashMap::new();
+        let mut scopes = Vec::new();
+        let mut highlights = Vec::new();
+        let mut rainbow_length = 0;
+
+        let mut warnings = Vec::new();
+
+        // TODO: alert user of parsing failures in editor
+        let palette = values
+            .remove("palette")
+            .map(|value| {
+                ThemePalette::try_from(value).unwrap_or_else(|err| {
+                    warnings.push(err);
+                    ThemePalette::default()
+                })
+            })
+            .unwrap_or_default();
+        // remove inherits from value to prevent errors
+        let _ = values.remove("inherits");
+        styles.reserve(values.len());
+        scopes.reserve(values.len());
+        highlights.reserve(values.len());
+
+        for (i, style) in values
+            .remove("rainbow")
+            .and_then(|value| match palette.parse_style_array(value) {
+                Ok(styles) => Some(styles),
+                Err(err) => {
+                    warn!("{}", err);
+                    None
+                }
+            })
+            .unwrap_or_else(default_rainbow)
+            .iter()
+            .enumerate()
+        {
+            let name = format!("rainbow.{}", i);
+            styles.insert(name.clone(), *style);
+            scopes.push(name);
+            highlights.push(*style);
+            rainbow_length += 1;
+        }
+
+        for (name, style_value) in values {
+            let mut style = Style::default();
+            if let Err(err) = palette.parse_style(&mut style, style_value) {
+                warnings.push(err);
+            }
+
+            // these are used both as UI and as highlights
+            styles.insert(name.clone(), style);
+            scopes.push(name);
+            highlights.push(style);
+        }
+
+        let theme = Self {
+            styles,
+            scopes,
+            highlights,
+            rainbow_length,
+            ..Default::default()
+        };
+
+        (theme, warnings)
+    }
 }
 
 fn default_rainbow() -> Vec<Style> {
@@ -392,6 +422,7 @@ impl Default for ThemePalette {
     fn default() -> Self {
         Self {
             palette: hashmap! {
+                "default".to_string() => Color::Reset,
                 "black".to_string() => Color::Black,
                 "red".to_string() => Color::Red,
                 "green".to_string() => Color::Green,
@@ -423,8 +454,23 @@ impl ThemePalette {
         Self { palette: default }
     }
 
-    pub fn hex_string_to_rgb(s: &str) -> Result<Color, String> {
-        if s.starts_with('#') && s.len() >= 7 {
+    pub fn string_to_rgb(s: &str) -> Result<Color, String> {
+        if s.starts_with('#') {
+            Self::hex_string_to_rgb(s)
+        } else {
+            Self::ansi_string_to_rgb(s)
+        }
+    }
+
+    fn ansi_string_to_rgb(s: &str) -> Result<Color, String> {
+        if let Ok(index) = s.parse::<u8>() {
+            return Ok(Color::Indexed(index));
+        }
+        Err(format!("Malformed ANSI: {}", s))
+    }
+
+    fn hex_string_to_rgb(s: &str) -> Result<Color, String> {
+        if s.len() >= 7 {
             if let (Ok(red), Ok(green), Ok(blue)) = (
                 u8::from_str_radix(&s[1..3], 16),
                 u8::from_str_radix(&s[3..5], 16),
@@ -434,13 +480,13 @@ impl ThemePalette {
             }
         }
 
-        Err(format!("Theme: malformed hexcode: {}", s))
+        Err(format!("Malformed hexcode: {}", s))
     }
 
     fn parse_value_as_str(value: &Value) -> Result<&str, String> {
         value
             .as_str()
-            .ok_or(format!("Theme: unrecognized value: {}", value))
+            .ok_or(format!("Unrecognized value: {}", value))
     }
 
     pub fn parse_color(&self, value: Value) -> Result<Color, String> {
@@ -450,21 +496,21 @@ impl ThemePalette {
             .get(value)
             .copied()
             .ok_or("")
-            .or_else(|_| Self::hex_string_to_rgb(value))
+            .or_else(|_| Self::string_to_rgb(value))
     }
 
     pub fn parse_modifier(value: &Value) -> Result<Modifier, String> {
         value
             .as_str()
             .and_then(|s| s.parse().ok())
-            .ok_or(format!("Theme: invalid modifier: {}", value))
+            .ok_or(format!("Invalid modifier: {}", value))
     }
 
     pub fn parse_underline_style(value: &Value) -> Result<UnderlineStyle, String> {
         value
             .as_str()
             .and_then(|s| s.parse().ok())
-            .ok_or(format!("Theme: invalid underline style: {}", value))
+            .ok_or(format!("Invalid underline style: {}", value))
     }
 
     pub fn parse_style(&self, style: &mut Style, value: Value) -> Result<(), String> {
@@ -474,9 +520,7 @@ impl ThemePalette {
                     "fg" => *style = style.fg(self.parse_color(value)?),
                     "bg" => *style = style.bg(self.parse_color(value)?),
                     "underline" => {
-                        let table = value
-                            .as_table_mut()
-                            .ok_or("Theme: underline must be table")?;
+                        let table = value.as_table_mut().ok_or("Underline must be table")?;
                         if let Some(value) = table.remove("color") {
                             *style = style.underline_color(self.parse_color(value)?);
                         }
@@ -485,13 +529,11 @@ impl ThemePalette {
                         }
 
                         if let Some(attr) = table.keys().next() {
-                            return Err(format!("Theme: invalid underline attribute: {attr}"));
+                            return Err(format!("Invalid underline attribute: {attr}"));
                         }
                     }
                     "modifiers" => {
-                        let modifiers = value
-                            .as_array()
-                            .ok_or("Theme: modifiers should be an array")?;
+                        let modifiers = value.as_array().ok_or("Modifiers should be an array")?;
 
                         for modifier in modifiers {
                             if modifier
@@ -504,7 +546,7 @@ impl ThemePalette {
                             }
                         }
                     }
-                    _ => return Err(format!("Theme: invalid style attribute: {}", name)),
+                    _ => return Err(format!("Invalid style attribute: {}", name)),
                 }
             }
         } else {
@@ -544,7 +586,7 @@ impl TryFrom<Value> for ThemePalette {
         let mut palette = HashMap::with_capacity(map.len());
         for (name, value) in map {
             let value = Self::parse_value_as_str(&value)?;
-            let color = Self::hex_string_to_rgb(value)?;
+            let color = Self::string_to_rgb(value)?;
             palette.insert(name, color);
         }
 

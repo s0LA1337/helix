@@ -20,20 +20,22 @@
 )
 
 (record_operand (atom (ident) @variable))
-(let_expr
+(let_in_block
   "let" @keyword
   "rec"? @keyword
+  "in" @keyword
+)
+
+(let_binding
   pat: (pattern
     (ident) @variable
   )
-  "in" @keyword
 )
+
 (fun_expr
   "fun" @keyword.function
   pats:
-    (pattern
-      id: (ident) @variable.parameter
-    )+
+    (pattern_fun (ident) @variable.parameter)+
   "=>" @operator
 )
 (record_field) @variable.other.member
@@ -53,7 +55,7 @@
 (interpolation_end) @punctuation.bracket
 
 ["forall" "default" "doc"] @keyword
-["if" "then" "else" "switch"] @keyword.control.conditional
+["if" "then" "else" "match"] @keyword.control.conditional
 "import" @keyword.control.import
 
 (infix_expr

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -311,7 +311,8 @@ pub struct Variable {
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Module {
-    pub id: String, // TODO: || number
+    #[serde(deserialize_with = "from_number")]
+    pub id: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
@@ -329,6 +330,23 @@ pub struct Module {
     pub date_time_stamp: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address_range: Option<String>,
+}
+
+fn from_number<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum NumberOrString {
+        Number(i64),
+        String(String),
+    }
+
+    match NumberOrString::deserialize(deserializer)? {
+        NumberOrString::Number(n) => Ok(n.to_string()),
+        NumberOrString::String(s) => Ok(s),
+    }
 }
 
 pub mod requests {
@@ -378,7 +396,7 @@ pub mod requests {
 
     impl Request for Launch {
         type Arguments = Value;
-        type Result = Value;
+        type Result = ();
         const COMMAND: &'static str = "launch";
     }
 
@@ -387,15 +405,35 @@ pub mod requests {
 
     impl Request for Attach {
         type Arguments = Value;
-        type Result = Value;
+        type Result = ();
         const COMMAND: &'static str = "attach";
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct DisconnectArguments {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub restart: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub terminate_debuggee: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub suspend_debuggee: Option<bool>,
+    }
+
+    #[derive(Debug)]
+    pub enum Restart {}
+
+    impl Request for Restart {
+        type Arguments = Value;
+        type Result = ();
+        const COMMAND: &'static str = "restart";
     }
 
     #[derive(Debug)]
     pub enum Disconnect {}
 
     impl Request for Disconnect {
-        type Arguments = ();
+        type Arguments = Option<DisconnectArguments>;
         type Result = ();
         const COMMAND: &'static str = "disconnect";
     }
@@ -866,5 +904,19 @@ pub mod events {
         pub memory_reference: String,
         pub offset: usize,
         pub count: usize,
+    }
+
+    #[test]
+    fn test_deserialize_module_id_from_number() {
+        let raw = r#"{"id": 0, "name": "Name"}"#;
+        let module: super::Module = serde_json::from_str(raw).expect("Error!");
+        assert_eq!(module.id, "0");
+    }
+
+    #[test]
+    fn test_deserialize_module_id_from_string() {
+        let raw = r#"{"id": "0", "name": "Name"}"#;
+        let module: super::Module = serde_json::from_str(raw).expect("Error!");
+        assert_eq!(module.id, "0");
     }
 }

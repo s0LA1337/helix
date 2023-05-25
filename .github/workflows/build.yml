@@ -6,22 +6,23 @@ on:
       - master
   merge_group:
   schedule:
-    - cron: '00 01 * * *'
+    - cron: "00 01 * * *"
 
 jobs:
   check:
     name: Check (msrv)
     runs-on: ubuntu-latest
+    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
       - name: Install stable toolchain
-        uses: helix-editor/rust-toolchain@v1
-        with:
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@1.70
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build"
 
       - name: Run cargo check
         run: cargo check
@@ -29,20 +30,23 @@ jobs:
   test:
     name: Test Suite
     runs-on: ${{ matrix.os }}
+    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
     env:
       RUST_BACKTRACE: 1
       HELIX_LOG_LEVEL: info
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@1.63
+        uses: dtolnay/rust-toolchain@1.70
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build"
 
       - name: Cache test tree-sitter grammar
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: runtime/grammars
           key: ${{ runner.os }}-stable-v${{ env.CACHE_VERSION }}-tree-sitter-grammars-${{ hashFiles('languages.toml') }}
@@ -61,16 +65,19 @@ jobs:
   lints:
     name: Lints
     runs-on: ubuntu-latest
+    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@1.63
+        uses: dtolnay/rust-toolchain@1.70
         with:
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build"
 
       - name: Run cargo fmt
         run: cargo fmt --all --check
@@ -86,17 +93,23 @@ jobs:
   docs:
     name: Docs
     runs-on: ubuntu-latest
+    if: github.repository == 'helix-editor/helix' || github.event_name != 'schedule'
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@1.63
+        uses: dtolnay/rust-toolchain@1.70
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build"
 
       - name: Validate queries
         run: cargo xtask query-check
+
+      - name: Validate themes
+        run: cargo xtask theme-check
 
       - name: Generate docs
         run: cargo xtask docgen
@@ -107,4 +120,3 @@ jobs:
           git diff-files --quiet \
             || (echo "Run 'cargo xtask docgen', commit the changes and push again" \
             && exit 1)
-
