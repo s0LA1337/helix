@@ -339,6 +339,8 @@ pub struct Config {
     pub rainbow_brackets: bool,
     /// Icons configuration
     pub icons: IconsConfig,
+    /// Draw border around popups.
+    pub popup_border: PopupBorderConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -362,10 +364,6 @@ pub struct StickyContextConfig {
     /// Whether or not the Sticky context shall also depend on the cursor position
     /// Default to off
     pub follow_cursor: bool,
-    /// Workspace specific lsp ceiling dirs
-    pub workspace_lsp_roots: Vec<PathBuf>,
-    /// Draw border around popups.
-    pub popup_border: PopupBorderConfig,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]

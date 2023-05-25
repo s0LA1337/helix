@@ -22,10 +22,9 @@ use helix_core::{
 };
 use helix_view::{
     document::{DocumentInlayHints, DocumentInlayHintsId, Mode},
-    editor::Action,
-    icons::{self, Icon, Icons},
     editor::{Action, PopupBorderConfig},
     graphics::Margin,
+    icons::{self, Icon, Icons},
     theme::Style,
     Document, View,
 };

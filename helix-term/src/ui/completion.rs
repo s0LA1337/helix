@@ -1,10 +1,9 @@
 use crate::compositor::{Component, Context, Event, EventResult};
 use helix_view::{
     document::SavePoint,
-    editor::CompleteAction,
-    icons::Icons,
     editor::{CompleteAction, PopupBorderConfig},
     graphics::Margin,
+    icons::Icons,
     theme::{Modifier, Style},
     ViewId,
 };

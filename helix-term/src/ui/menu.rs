@@ -4,10 +4,9 @@ use crate::{
     compositor::{Callback, Component, Compositor, Context, Event, EventResult},
     ctrl, key, shift,
 };
-use tui::{buffer::Buffer as Surface, text::Span, widgets::Table};
 use tui::{
-    buffer::Buffer as Surface,
     widgets::{Block, Borders, Table, Widget},
+    {buffer::Buffer as Surface, text::Span},
 };
 
 pub use tui::widgets::{Cell, Row};
@@ -15,10 +14,10 @@ pub use tui::widgets::{Cell, Row};
 use fuzzy_matcher::skim::SkimMatcherV2 as Matcher;
 use fuzzy_matcher::FuzzyMatcher;
 
-use helix_view::{graphics::Rect, icons::Icons, Editor};
 use helix_view::{
     editor::PopupBorderConfig,
     graphics::{Margin, Rect},
+    icons::Icons,
     Editor,
 };
 use tui::layout::Constraint;
