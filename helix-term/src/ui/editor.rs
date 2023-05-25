@@ -17,8 +17,9 @@ use helix_core::{
         ensure_grapheme_boundary_next_byte, next_grapheme_boundary, prev_grapheme_boundary,
     },
     movement::Direction,
-    syntax::{self, HighlightEvent},
+    syntax::{self, HighlightEvent, RopeProvider},
     text_annotations::TextAnnotations,
+    tree_sitter::{QueryCursor, QueryMatch},
     unicode::width::UnicodeWidthStr,
     visual_offset_from_block, Change, Position, Range, Selection, Transaction,
 };
@@ -30,12 +31,37 @@ use helix_view::{
     keyboard::{KeyCode, KeyModifiers},
     Document, Editor, Theme, View,
 };
-use std::{mem::take, num::NonZeroUsize, path::PathBuf, rc::Rc, sync::Arc};
+use std::{collections::HashSet, mem::take, num::NonZeroUsize, path::PathBuf, rc::Rc, sync::Arc};
 
 use tui::{buffer::Buffer as Surface, text::Span};
 
-use super::{completion::CompletionItem, statusline};
+use super::{completion::CompletionItem, document::render_text, statusline};
 use super::{document::LineDecoration, lsp::SignatureHelp};
+
+#[derive(Debug, Clone)]
+pub struct StickyNode {
+    line: usize,
+    visual_line: u16,
+    byte_range: std::ops::Range<usize>,
+    indicator: Option<String>,
+    top_first_byte: usize,
+    cursor_byte: usize,
+    has_context_end: bool,
+}
+
+impl PartialEq for StickyNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.line == other.line
+    }
+}
+
+impl Eq for StickyNode {}
+
+impl std::hash::Hash for StickyNode {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.line.hash(state);
+    }
+}
 
 pub struct EditorView {
     pub keymaps: Keymaps,
@@ -44,6 +70,7 @@ pub struct EditorView {
     pub(crate) last_insert: (commands::MappableCommand, Vec<InsertEvent>),
     pub(crate) completion: Option<Completion>,
     spinners: ProgressSpinners,
+    sticky_nodes: Option<Vec<StickyNode>>,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +99,7 @@ impl EditorView {
             last_insert: (commands::MappableCommand::normal_mode, Vec::new()),
             completion: None,
             spinners: ProgressSpinners::default(),
+            sticky_nodes: None,
         }
     }
 
@@ -80,7 +108,7 @@ impl EditorView {
     }
 
     pub fn render_view(
-        &self,
+        &mut self,
         editor: &Editor,
         doc: &Document,
         view: &View,
@@ -172,15 +200,10 @@ impl EditorView {
             Box::new(highlights)
         };
 
-        Self::render_gutter(
-            editor,
-            doc,
-            view,
-            view.area,
-            theme,
-            is_focused,
-            &mut line_decorations,
-        );
+        if config.sticky_context.enable {
+            self.sticky_nodes =
+                Self::calculate_sticky_nodes(&self.sticky_nodes, doc, view, &config);
+        }
 
         if is_focused {
             let cursor = doc
@@ -194,6 +217,16 @@ impl EditorView {
             translated_positions.push((cursor, Box::new(update_cursor_cache)));
         }
 
+        Self::render_gutter(
+            editor,
+            doc,
+            &self.sticky_nodes,
+            view,
+            theme,
+            is_focused,
+            &mut line_decorations,
+        );
+
         render_document(
             surface,
             inner,
@@ -205,6 +238,20 @@ impl EditorView {
             &mut line_decorations,
             &mut translated_positions,
         );
+
+        if config.sticky_context.enable {
+            Self::render_sticky_context(
+                doc,
+                view,
+                surface,
+                &self.sticky_nodes,
+                &text_annotations,
+                &mut line_decorations,
+                &mut translated_positions,
+                theme,
+            );
+        }
+
         Self::render_rulers(editor, doc, view, inner, surface, theme);
 
         // if we're not at the edge of the screen, draw a right border
@@ -521,7 +568,6 @@ impl EditorView {
         let base_primary_cursor_scope = theme
             .find_scope_index("ui.cursor.primary")
             .unwrap_or(base_cursor_scope);
-
         let cursor_scope = match mode {
             Mode::Insert => theme.find_scope_index_exact("ui.cursor.insert"),
             Mode::Select => theme.find_scope_index_exact("ui.cursor.select"),
@@ -673,8 +719,8 @@ impl EditorView {
     pub fn render_gutter<'d>(
         editor: &'d Editor,
         doc: &'d Document,
+        context: &'d Option<Vec<StickyNode>>,
         view: &View,
-        viewport: Rect,
         theme: &Theme,
         is_focused: bool,
         line_decorations: &mut Vec<Box<(dyn LineDecoration + 'd)>>,
@@ -687,6 +733,7 @@ impl EditorView {
             .collect();
 
         let mut offset = 0;
+        let viewport = view.area;
 
         let gutter_style = theme.get("ui.gutter");
         let gutter_selected_style = theme.get("ui.gutter.selected");
@@ -697,7 +744,7 @@ impl EditorView {
             let mut gutter = gutter_type.style(editor, doc, view, theme, is_focused);
             let width = gutter_type.width(view, doc);
             // avoid lots of small allocations by reusing a text buffer for each line
-            let mut text = String::with_capacity(width);
+            let mut text_to_draw = String::with_capacity(width);
             let cursors = cursors.clone();
             let gutter_decoration = move |renderer: &mut TextRenderer, pos: LinePos| {
                 // TODO handle softwrap in gutters
@@ -712,12 +759,28 @@ impl EditorView {
                     (true, false) => gutter_selected_style_virtual,
                 };
 
-                if let Some(style) =
-                    gutter(pos.doc_line, selected, pos.first_visual_line, &mut text)
+                let mut doc_line = Some(pos.doc_line);
+                if let Some(current_context) = context
+                    .as_ref()
+                    .and_then(|c| c.iter().find(|n| n.visual_line == pos.visual_line))
                 {
-                    renderer
-                        .surface
-                        .set_stringn(x, y, &text, width, gutter_style.patch(style));
+                    doc_line = if current_context.indicator.is_some() {
+                        None
+                    } else {
+                        Some(current_context.line)
+                    };
+                }
+
+                if let Some(style) =
+                    gutter(doc_line, selected, pos.first_visual_line, &mut text_to_draw)
+                {
+                    renderer.surface.set_stringn(
+                        x,
+                        y,
+                        &text_to_draw,
+                        width,
+                        gutter_style.patch(style),
+                    );
                 } else {
                     renderer.surface.set_style(
                         Rect {
@@ -729,7 +792,7 @@ impl EditorView {
                         gutter_style,
                     );
                 }
-                text.clear();
+                text_to_draw.clear();
             };
             line_decorations.push(Box::new(gutter_decoration));
 
@@ -797,6 +860,339 @@ impl EditorView {
             Rect::new(viewport.right() - width, viewport.y + 1, width, height),
             surface,
         );
+    }
+
+    /// Render the sticky context
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_sticky_context(
+        doc: &Document,
+        view: &View,
+        surface: &mut Surface,
+        context: &Option<Vec<StickyNode>>,
+        doc_annotations: &TextAnnotations,
+        line_decoration: &mut [Box<dyn LineDecoration + '_>],
+        translated_positions: &mut [TranslatedPosition],
+        theme: &Theme,
+    ) {
+        let Some(context) = context else {
+            return;
+        };
+
+        let text = doc.text().slice(..);
+        let viewport = view.inner_area(doc);
+
+        // backup (status line) shall always exist
+        let status_line_style = theme
+            .try_get("ui.statusline")
+            .expect("`ui.statusline` exists");
+
+        // define sticky context styles
+        let context_style = theme
+            .try_get("ui.sticky.context")
+            .unwrap_or(status_line_style);
+        let indicator_style = theme
+            .try_get("ui.sticky.indicator")
+            .unwrap_or(status_line_style);
+
+        let mut context_area = viewport;
+        context_area.height = 1;
+
+        for node in context {
+            surface.clear_with(context_area, context_style);
+
+            let mut new_offset = view.offset;
+            let mut line_context_area = context_area;
+
+            if let Some(indicator) = node.indicator.as_deref() {
+                // set the indicator
+                surface.set_stringn(
+                    line_context_area.x,
+                    line_context_area.y,
+                    indicator,
+                    indicator.len(),
+                    indicator_style,
+                );
+                continue;
+            }
+
+            // get the len of bytes of the text that will be written (the "definition" line)
+            let line = text.line(node.line);
+            let tab_count = line.chars().take_while(|c| *c == '\t').count();
+
+            let already_written =
+                (line.len_bytes() + tab_count.saturating_mul(doc.tab_width() - 1)) as u16;
+
+            let dots = "...";
+
+            let mut cleared_virtual_text_annotations = doc_annotations.clone();
+            cleared_virtual_text_annotations.clear_line_annotations();
+            cleared_virtual_text_annotations.clear_inline_annotations();
+
+            // if the definition of the function contains multiple lines
+            if node.has_context_end {
+                let last_line = text.byte_to_line(node.byte_range.end);
+                let overdraw_offset = text
+                    .line(last_line)
+                    .chars()
+                    .take_while(|c| c.is_whitespace())
+                    .count()
+                    + 1;
+
+                // handle tabs
+                let overdraw_offset =
+                    overdraw_offset + tab_count.saturating_mul(doc.tab_width() - 1);
+
+                // calculation of the correct space on where the end of the signature
+                // should be drawn at
+                let mut additional_area = line_context_area;
+                additional_area.x +=
+                    (already_written + dots.len() as u16).saturating_sub(overdraw_offset as u16);
+
+                // render the end of the function definition
+                let mut renderer = TextRenderer::new(
+                    surface,
+                    doc,
+                    theme,
+                    view.offset.horizontal_offset,
+                    additional_area,
+                );
+                new_offset.anchor = text.byte_to_char(node.byte_range.end);
+                let highlights = Self::doc_syntax_highlights(doc, new_offset.anchor, 1, theme);
+
+                render_text(
+                    &mut renderer,
+                    text,
+                    new_offset,
+                    &doc.text_format(additional_area.width, Some(theme)),
+                    &cleared_virtual_text_annotations,
+                    highlights,
+                    theme,
+                    line_decoration,
+                    translated_positions,
+                );
+
+                // draw the "..." with the keyword.operator style
+                let new_x_location =
+                    (already_written + line_context_area.x).saturating_sub(match doc.line_ending {
+                        helix_core::LineEnding::Crlf => 2,
+                        helix_core::LineEnding::LF => 1,
+                    });
+
+                surface.set_stringn(
+                    new_x_location,
+                    additional_area.y,
+                    dots,
+                    dots.len(),
+                    theme.get("keyword.operator"),
+                );
+            }
+
+            new_offset.anchor = text.byte_to_char(node.byte_range.start);
+
+            // get all highlights from the latest point
+            let highlights = Self::doc_syntax_highlights(doc, new_offset.anchor, 1, theme);
+
+            let mut renderer = TextRenderer::new(
+                surface,
+                doc,
+                theme,
+                view.offset.horizontal_offset,
+                line_context_area,
+            );
+
+            // limit the width to its size - 1, so that it won't draw trailing whitespace characters
+            line_context_area.width = already_written - 1;
+
+            render_text(
+                &mut renderer,
+                text,
+                new_offset,
+                &doc.text_format(line_context_area.width, Some(theme)),
+                &cleared_virtual_text_annotations,
+                highlights,
+                theme,
+                line_decoration,
+                translated_positions,
+            );
+
+            // next node
+            context_area.y += 1;
+        }
+    }
+
+    fn get_context_paired_range(
+        query_match: &QueryMatch,
+        start_index: u32,
+        end_index: u32,
+        top_first_byte: usize,
+        last_scan_byte: usize,
+    ) -> Option<std::ops::Range<usize>> {
+        let end_nodes: Vec<_> = query_match.nodes_for_capture_index(end_index).collect();
+        query_match
+            .nodes_for_capture_index(start_index)
+            .flat_map(move |context| {
+                end_nodes
+                    .clone()
+                    .into_iter()
+                    .filter(move |it| {
+                        let start_range = context.byte_range();
+                        let end = it.start_byte();
+                        start_range.contains(&end)
+                            && start_range.contains(&top_first_byte)
+                            && start_range.contains(&last_scan_byte)
+                            // only match @context.end nodes that aren't at the end of the line
+                            && context.start_position().row != it.start_position().row
+                    })
+                    // in some cases, the start byte of a block is on the next line
+                    // which causes to show the actual first line of content instead of
+                    // the actual wanted "end of signature" line
+                    .map(move |it| context.start_byte()..it.start_byte().saturating_sub(1))
+            })
+            .next()
+    }
+
+    /// Calculates the sticky nodes
+    fn calculate_sticky_nodes(
+        nodes: &Option<Vec<StickyNode>>,
+        doc: &Document,
+        view: &View,
+        config: &helix_view::editor::Config,
+    ) -> Option<Vec<StickyNode>> {
+        let syntax = doc.syntax()?;
+        let tree = syntax.tree();
+        let text = doc.text().slice(..);
+        let viewport = view.inner_area(doc);
+        let cursor_byte = text.char_to_byte(doc.selection(view.id).primary().cursor(text));
+
+        // Use the cached nodes to determine the current topmost viewport
+        let anchor_line = text.char_to_line(view.offset.anchor);
+        let top_first_byte =
+            text.line_to_byte(anchor_line + nodes.as_deref().map_or(0, |v| v.len()));
+
+        let last_scan_byte = if config.sticky_context.follow_cursor {
+            cursor_byte
+        } else {
+            top_first_byte
+        };
+
+        let visual_cursor_pos = view
+            .screen_coords_at_pos(doc, text, cursor_byte)
+            .unwrap_or_default()
+            .row as u16;
+
+        if visual_cursor_pos == 0 {
+            return None;
+        }
+
+        // nothing has changed, so the cached result can be returned
+        if let Some(nodes) = nodes {
+            if nodes.iter().any(|node| {
+                (node.top_first_byte == top_first_byte && node.cursor_byte == last_scan_byte)
+                    && (visual_cursor_pos as usize) >= nodes.len()
+            }) {
+                return Some(nodes.to_vec());
+            }
+        }
+
+        let context_nodes = doc
+            .language_config()
+            .and_then(|lang| lang.context_query())?;
+
+        let start_index = context_nodes.query.capture_index_for_name("context")?;
+        let end_index = context_nodes
+            .query
+            .capture_index_for_name("context.end")
+            .unwrap_or(start_index);
+
+        // context is list of numbers of lines that should be rendered in the LSP context
+        let mut context: HashSet<StickyNode> = HashSet::new();
+
+        let mut cursor = QueryCursor::new();
+
+        // only run the query from start to the cursor location
+        cursor.set_byte_range(0..last_scan_byte);
+        let query = &context_nodes.query;
+        let query_nodes = cursor.matches(query, tree.root_node(), RopeProvider(text));
+
+        for matched_node in query_nodes {
+            // find @context.end nodes
+            let node_byte_range = Self::get_context_paired_range(
+                &matched_node,
+                start_index,
+                end_index,
+                top_first_byte,
+                last_scan_byte,
+            );
+            for node in matched_node.nodes_for_capture_index(start_index) {
+                if (!node.byte_range().contains(&last_scan_byte)
+                    || !node.byte_range().contains(&top_first_byte))
+                    && node_byte_range.is_none()
+                {
+                    continue;
+                }
+
+                context.insert(StickyNode {
+                    line: node.start_position().row,
+                    visual_line: 0,
+                    byte_range: node_byte_range
+                        .as_ref()
+                        .unwrap_or(&(node.start_byte()..node.start_byte()))
+                        .clone(),
+                    indicator: None,
+                    top_first_byte,
+                    cursor_byte: last_scan_byte,
+                    has_context_end: node_byte_range.is_some(),
+                });
+            }
+        }
+        // context should be filled by now
+        if context.is_empty() {
+            return None;
+        }
+
+        // always cap the maximum amount of sticky contextes to 1/3 of the viewport
+        // unless configured otherwise
+        let max_lines = config.sticky_context.max_lines;
+        let max_nodes_amount = if max_lines == 0 {
+            viewport.height as usize / 3
+        } else {
+            max_lines.min(viewport.height) as usize
+        };
+
+        let mut result: Vec<StickyNode> = context.into_iter().collect();
+        result.sort_by(|lnode, rnode| lnode.line.cmp(&rnode.line));
+
+        result = result
+            .into_iter()
+            // only take the nodes until 1 / 3 of the viewport is reached or the maximum amount of sticky nodes
+            .take(max_nodes_amount)
+            .enumerate()
+            .take_while(|(i, _)| {
+                *i + Into::<usize>::into(config.sticky_context.indicator)
+                    != visual_cursor_pos as usize
+            }) // also only nodes that don't overlap with the visual cursor position
+            .map(|(i, node)| {
+                let mut new_node = node;
+                new_node.visual_line = i as u16;
+                new_node
+            })
+            .collect();
+
+        if config.sticky_context.indicator {
+            let str = "─".repeat(viewport.width as usize);
+
+            result.push(StickyNode {
+                line: usize::MAX,
+                visual_line: result.len() as u16,
+                byte_range: 0..0,
+                indicator: Some(str),
+                top_first_byte,
+                cursor_byte: last_scan_byte,
+                has_context_end: false,
+            });
+        }
+
+        Some(result)
     }
 
     /// Apply the highlighting on the lines where a cursor is active

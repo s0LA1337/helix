@@ -286,6 +286,33 @@ pub struct Config {
     pub cursor_word: bool,
     /// Workspace specific lsp ceiling dirs
     pub workspace_lsp_roots: Vec<PathBuf>,
+    /// Contextual information on top of the viewport
+    pub sticky_context: StickyContextConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct StickyContextConfig {
+    /// Display context of current top view if it is outside the view. Default to off
+    pub enable: bool,
+
+    /// Display an indicator whether to indicate if the sticky context is active
+    /// Eventually making this a string so that it is configurable.
+    pub indicator: bool,
+
+    /// The max amount of lines to be displayed. (including indicator!)
+    /// The viewport is taken into account when changing this value.
+    /// So if the configured amount is more than the viewport height, it will be capped to a max
+    /// of the complete viewport height.
+    ///
+    /// Default: 0, which means that it is a fixed size based on the viewport
+    pub max_lines: u16,
+
+    /// Whether or not the Sticky context shall also depend on the cursor position
+    /// Default to off
+    pub follow_cursor: bool,
+    /// Workspace specific lsp ceiling dirs
+    pub workspace_lsp_roots: Vec<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -762,6 +789,7 @@ impl Default for Config {
             text_width: 80,
             completion_replace: false,
             workspace_lsp_roots: Vec::new(),
+            sticky_context: StickyContextConfig::default(),
         }
     }
 }

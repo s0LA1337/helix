@@ -231,6 +231,12 @@ impl TextAnnotations {
         self.line_annotations.clear();
     }
 
+    /// Removes all inline annotations, useful if you don't want to draw
+    /// any virtual text.
+    pub fn clear_inline_annotations(&mut self) {
+        self.inline_annotations.clear();
+    }
+
     pub(crate) fn next_inline_annotation_at(
         &self,
         char_idx: usize,
