@@ -1,8 +1,8 @@
-| Language | Syntax Highlighting | Treesitter Textobjects | Auto Indent | Sticky Context | Default LSP |
+| Language | Syntax Highlighting | Treesitter Textobjects | Auto Indent | Rainbow Brackets | Default LSP |
 | --- | --- | --- | --- | --- | --- |
 | astro | ✓ |  |  |  |  |
 | awk | ✓ | ✓ |  |  | `awk-language-server` |
-| bash | ✓ |  | ✓ |  | `bash-language-server` |
+| bash | ✓ |  | ✓ | ✓ | `bash-language-server` |
 | bass | ✓ |  |  |  | `bass` |
 | beancount | ✓ |  |  |  |  |
 | bibtex | ✓ |  |  |  | `texlab` |
@@ -12,14 +12,14 @@
 | cabal |  |  |  |  |  |
 | cairo | ✓ |  |  |  |  |
 | capnp | ✓ |  | ✓ |  |  |
-| clojure | ✓ |  |  |  | `clojure-lsp` |
+| clojure | ✓ |  |  | ✓ | `clojure-lsp` |
 | cmake | ✓ | ✓ | ✓ |  | `cmake-language-server` |
 | comment | ✓ |  |  |  |  |
-| common-lisp | ✓ |  |  |  | `cl-lsp` |
+| common-lisp | ✓ |  |  | ✓ | `cl-lsp` |
 | cpon | ✓ |  | ✓ |  |  |
 | cpp | ✓ | ✓ | ✓ | ✓ | `clangd` |
 | crystal | ✓ | ✓ |  |  | `crystalline` |
-| css | ✓ |  |  |  | `vscode-css-language-server` |
+| css | ✓ |  |  | ✓ | `vscode-css-language-server` |
 | cue | ✓ |  |  |  | `cuelsp` |
 | d | ✓ | ✓ | ✓ |  | `serve-d` |
 | dart | ✓ |  | ✓ |  | `dart` |
@@ -37,7 +37,7 @@
 | elvish | ✓ |  |  |  | `elvish` |
 | env | ✓ |  |  |  |  |
 | erb | ✓ |  |  |  |  |
-| erlang | ✓ | ✓ |  |  | `erlang_ls` |
+| erlang | ✓ | ✓ |  | ✓ | `erlang_ls` |
 | esdl | ✓ |  |  |  |  |
 | fish | ✓ | ✓ | ✓ |  |  |
 | fortran | ✓ |  | ✓ |  | `fortls` |
@@ -60,17 +60,17 @@
 | hcl | ✓ |  | ✓ |  | `terraform-ls` |
 | heex | ✓ | ✓ |  |  | `elixir-ls` |
 | hosts | ✓ |  |  |  |  |
-| html | ✓ |  |  |  | `vscode-html-language-server` |
+| html | ✓ |  |  | ✓ | `vscode-html-language-server` |
 | hurl | ✓ |  | ✓ |  |  |
 | idris |  |  |  |  | `idris2-lsp` |
 | iex | ✓ |  |  |  |  |
 | ini | ✓ |  |  |  |  |
-| java | ✓ | ✓ |  |  | `jdtls` |
-| javascript | ✓ | ✓ | ✓ |  | `typescript-language-server` |
+| java | ✓ | ✓ |  | ✓ | `jdtls` |
+| javascript | ✓ | ✓ | ✓ | ✓ | `typescript-language-server` |
 | jsdoc | ✓ |  |  |  |  |
 | json | ✓ |  | ✓ | ✓ | `vscode-json-language-server` |
 | jsonnet | ✓ |  |  |  | `jsonnet-language-server` |
-| jsx | ✓ | ✓ | ✓ |  | `typescript-language-server` |
+| jsx | ✓ | ✓ | ✓ | ✓ | `typescript-language-server` |
 | julia | ✓ | ✓ | ✓ |  | `julia` |
 | just | ✓ | ✓ | ✓ |  |  |
 | kdl | ✓ |  |  |  |  |
@@ -84,7 +84,7 @@
 | lua | ✓ | ✓ | ✓ |  | `lua-language-server` |
 | make | ✓ |  |  |  |  |
 | markdoc | ✓ |  |  |  | `markdoc-ls` |
-| markdown | ✓ |  |  | ✓ | `marksman` |
+| markdown | ✓ |  |  |  | `marksman` |
 | markdown.inline | ✓ |  |  |  |  |
 | matlab | ✓ |  |  |  |  |
 | mermaid | ✓ |  |  |  |  |
@@ -114,30 +114,30 @@
 | protobuf | ✓ |  | ✓ |  |  |
 | prql | ✓ |  |  |  |  |
 | purescript | ✓ |  |  |  | `purescript-language-server` |
-| python | ✓ | ✓ | ✓ |  | `pylsp` |
+| python | ✓ | ✓ | ✓ | ✓ | `pylsp` |
 | qml | ✓ |  | ✓ |  | `qmlls` |
 | r | ✓ |  |  |  | `R` |
-| racket | ✓ |  |  |  | `racket` |
-| regex | ✓ |  |  |  |  |
+| racket | ✓ |  |  | ✓ | `racket` |
+| regex | ✓ |  |  | ✓ |  |
 | rego | ✓ |  |  |  | `regols` |
 | rescript | ✓ | ✓ |  |  | `rescript-language-server` |
 | rmarkdown | ✓ |  | ✓ |  | `R` |
 | robot | ✓ |  |  |  | `robotframework_ls` |
 | ron | ✓ |  | ✓ |  |  |
 | rst | ✓ |  |  |  |  |
-| ruby | ✓ | ✓ | ✓ |  | `solargraph` |
+| ruby | ✓ | ✓ | ✓ | ✓ | `solargraph` |
 | rust | ✓ | ✓ | ✓ | ✓ | `rust-analyzer` |
 | sage | ✓ | ✓ |  |  |  |
 | scala | ✓ |  | ✓ |  | `metals` |
-| scheme | ✓ |  |  |  |  |
-| scss | ✓ |  |  |  | `vscode-css-language-server` |
+| scheme | ✓ |  |  | ✓ |  |
+| scss | ✓ |  |  | ✓ | `vscode-css-language-server` |
 | slint | ✓ |  | ✓ |  | `slint-lsp` |
 | smithy | ✓ |  |  |  | `cs` |
 | sml | ✓ |  |  |  |  |
 | solidity | ✓ |  |  |  | `solc` |
 | sql | ✓ |  |  |  |  |
 | sshclientconfig | ✓ |  |  |  |  |
-| starlark | ✓ | ✓ |  |  |  |
+| starlark | ✓ | ✓ |  | ✓ |  |
 | svelte | ✓ |  |  |  | `svelteserver` |
 | sway | ✓ | ✓ | ✓ |  | `forc` |
 | swift | ✓ |  |  |  | `sourcekit-lsp` |
@@ -145,8 +145,8 @@
 | task | ✓ |  |  |  |  |
 | tfvars | ✓ |  | ✓ |  | `terraform-ls` |
 | toml | ✓ |  |  | ✓ | `taplo` |
-| tsq | ✓ |  |  |  |  |
-| tsx | ✓ | ✓ | ✓ |  | `typescript-language-server` |
+| tsq | ✓ |  |  | ✓ |  |
+| tsx | ✓ | ✓ | ✓ | ✓ | `typescript-language-server` |
 | twig | ✓ |  |  |  |  |
 | typescript | ✓ | ✓ | ✓ | ✓ | `typescript-language-server` |
 | ungrammar | ✓ |  |  |  |  |
@@ -162,7 +162,7 @@
 | wgsl | ✓ |  |  |  | `wgsl_analyzer` |
 | wit | ✓ |  | ✓ |  |  |
 | xit | ✓ |  |  |  |  |
-| xml | ✓ |  | ✓ |  |  |
+| xml | ✓ |  | ✓ | ✓ |  |
 | yaml | ✓ |  | ✓ | ✓ | `yaml-language-server` |
 | yuck | ✓ |  |  |  |  |
 | zig | ✓ | ✓ | ✓ | ✓ | `zls` |

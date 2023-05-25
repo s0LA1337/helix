@@ -13,6 +13,7 @@ pub enum TsFeature {
     TextObject,
     AutoIndent,
     Context,
+    RainbowBrackets,
 }
 
 impl TsFeature {
@@ -22,6 +23,7 @@ impl TsFeature {
             Self::TextObject,
             Self::AutoIndent,
             Self::Context,
+            Self::RainbowBrackets,
         ]
     }
 
@@ -31,6 +33,7 @@ impl TsFeature {
             Self::TextObject => "textobjects.scm",
             Self::AutoIndent => "indents.scm",
             Self::Context => "context.scm",
+            Self::RainbowBrackets => "rainbows.scm",
         }
     }
 
@@ -40,6 +43,7 @@ impl TsFeature {
             Self::TextObject => "Treesitter Textobjects",
             Self::AutoIndent => "Auto Indent",
             Self::Context => "Sticky Context",
+            Self::RainbowBrackets => "Rainbow Brackets",
         }
     }
 
@@ -49,6 +53,7 @@ impl TsFeature {
             Self::TextObject => "Textobject",
             Self::AutoIndent => "Indent",
             Self::Context => "Context",
+            Self::RainbowBrackets => "Rainbow",
         }
     }
 }
