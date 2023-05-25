@@ -94,6 +94,10 @@ impl Prompt {
         self
     }
 
+    pub fn prompt(&self) -> &str {
+        self.prompt.as_ref()
+    }
+
     pub fn line(&self) -> &String {
         &self.line
     }
