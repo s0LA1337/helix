@@ -1153,8 +1153,8 @@ impl EditorView {
 
         // Use the cached nodes to determine the current topmost viewport
         let anchor_line = text.char_to_line(view.offset.anchor);
-        let top_first_byte =
-            text.line_to_byte(anchor_line + nodes.as_deref().map_or(0, |v| v.len()));
+        let top_first_byte = text
+            .line_to_byte(anchor_line + nodes.as_deref().map_or(0, |v| v.len().min(anchor_line)));
 
         let last_scan_byte = if config.sticky_context.follow_cursor {
             cursor_byte
