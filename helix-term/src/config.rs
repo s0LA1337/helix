@@ -1,4 +1,4 @@
-use crate::keymap;
+use crate::keymap::{self, MappableCommand};
 use crate::keymap::{merge_keys, Keymap};
 use helix_loader::merge_toml_values;
 use helix_view::document::Mode;
@@ -9,11 +9,11 @@ use std::fs;
 use std::io::Error as IOError;
 use toml::de::Error as TomlError;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct Config {
     pub theme: Option<String>,
     pub icons: Option<String>,
-    pub keys: HashMap<Mode, Keymap>,
+    pub keys: KeymapConfig,
     pub editor: helix_view::editor::Config,
 }
 
@@ -22,17 +22,25 @@ pub struct Config {
 pub struct ConfigRaw {
     pub theme: Option<String>,
     pub icons: Option<String>,
-    pub keys: Option<HashMap<Mode, Keymap>>,
+    pub keys: Option<KeymapConfig>,
     pub editor: Option<toml::Value>,
 }
 
-impl Default for Config {
-    fn default() -> Config {
-        Config {
-            theme: None,
-            icons: None,
-            keys: keymap::default(),
-            editor: helix_view::editor::Config::default(),
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct KeymapConfig {
+    /// An alternative command to run when tab is pressed and the cursor has
+    /// text other than whitespace to its left on the current line.
+    pub supertab: Option<MappableCommand>,
+
+    #[serde(flatten)]
+    pub bindings: HashMap<Mode, Keymap>,
+}
+
+impl Default for KeymapConfig {
+    fn default() -> KeymapConfig {
+        KeymapConfig {
+            supertab: None,
+            bindings: keymap::default(),
         }
     }
 }
@@ -65,17 +73,31 @@ impl Config {
     ) -> Result<Config, ConfigLoadError> {
         let global_config: Result<ConfigRaw, ConfigLoadError> =
             global.and_then(|file| toml::from_str(&file).map_err(ConfigLoadError::BadConfig));
+
         let local_config: Result<ConfigRaw, ConfigLoadError> =
             local.and_then(|file| toml::from_str(&file).map_err(ConfigLoadError::BadConfig));
+
+        let mut result_keymap_config = KeymapConfig::default();
+
+        let mut merge_keymap_configs = |config: &ConfigRaw| {
+            let result_keymap_config = &mut result_keymap_config;
+
+            if let Some(ref keymap_config) = config.keys {
+                if let Some(supertab_config) = &keymap_config.supertab {
+                    result_keymap_config.supertab = Some(supertab_config.clone());
+                }
+
+                merge_keys(
+                    &mut result_keymap_config.bindings,
+                    keymap_config.bindings.clone(),
+                )
+            }
+        };
+
         let res = match (global_config, local_config) {
             (Ok(global), Ok(local)) => {
-                let mut keys = keymap::default();
-                if let Some(global_keys) = global.keys {
-                    merge_keys(&mut keys, global_keys)
-                }
-                if let Some(local_keys) = local.keys {
-                    merge_keys(&mut keys, local_keys)
-                }
+                merge_keymap_configs(&global);
+                merge_keymap_configs(&local);
 
                 let editor = match (global.editor, local.editor) {
                     (None, None) => helix_view::editor::Config::default(),
@@ -90,7 +112,7 @@ impl Config {
                 Config {
                     theme: local.theme.or(global.theme),
                     icons: local.icons.or(global.icons),
-                    keys,
+                    keys: result_keymap_config,
                     editor,
                 }
             }
@@ -100,20 +122,19 @@ impl Config {
                 return Err(ConfigLoadError::BadConfig(err))
             }
             (Ok(config), Err(_)) | (Err(_), Ok(config)) => {
-                let mut keys = keymap::default();
-                if let Some(keymap) = config.keys {
-                    merge_keys(&mut keys, keymap);
-                }
+                merge_keymap_configs(&config);
+
                 Config {
                     theme: config.theme,
                     icons: config.icons,
-                    keys,
+                    keys: result_keymap_config,
                     editor: config.editor.map_or_else(
                         || Ok(helix_view::editor::Config::default()),
                         |val| val.try_into().map_err(ConfigLoadError::BadConfig),
                     )?,
                 }
             }
+
             // these are just two io errors return the one for the global config
             (Err(err), Err(_)) => return Err(err),
         };
@@ -156,9 +177,10 @@ mod tests {
             A-F12 = "move_next_word_end"
         "#;
 
-        let mut keys = keymap::default();
+        let mut keymap_config = KeymapConfig::default();
+
         merge_keys(
-            &mut keys,
+            &mut keymap_config.bindings,
             hashmap! {
                 Mode::Insert => Keymap::new(keymap!({ "Insert mode"
                     "y" => move_line_down,
@@ -173,7 +195,7 @@ mod tests {
         assert_eq!(
             Config::load_test(sample_keymaps),
             Config {
-                keys,
+                keys: keymap_config,
                 ..Default::default()
             }
         );
@@ -182,11 +204,11 @@ mod tests {
     #[test]
     fn keys_resolve_to_correct_defaults() {
         // From serde default
-        let default_keys = Config::load_test("").keys;
+        let default_keys = Config::load_test("").keys.bindings;
         assert_eq!(default_keys, keymap::default());
 
         // From the Default trait
-        let default_keys = Config::default().keys;
+        let default_keys = Config::default().keys.bindings;
         assert_eq!(default_keys, keymap::default());
     }
 }

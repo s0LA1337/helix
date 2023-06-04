@@ -1828,6 +1828,7 @@ impl Component for EditorView {
             callback: None,
             on_next_key_callback: None,
             jobs: context.jobs,
+            keymap_config: context.keymap_config,
         };
 
         match event {
@@ -1880,6 +1881,7 @@ impl Component for EditorView {
                                         editor: cx.editor,
                                         jobs: cx.jobs,
                                         scroll: None,
+                                        keymap_config: cx.keymap_config,
                                     };
 
                                     if let EventResult::Consumed(callback) =

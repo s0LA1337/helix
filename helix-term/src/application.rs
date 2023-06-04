@@ -31,11 +31,14 @@ use crate::{
 use log::{debug, error, warn};
 use std::{
     collections::btree_map::Entry,
-    io::{stdin, stdout},
+    io::stdin,
     path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
+
+#[cfg(not(feature = "integration"))]
+use std::io::stdout;
 
 use anyhow::{Context, Error};
 
@@ -174,8 +177,9 @@ impl Application {
         editor.set_icons(icons);
 
         let keys = Box::new(Map::new(Arc::clone(&config), |config: &Config| {
-            &config.keys
+            &config.keys.bindings
         }));
+
         let editor_view = Box::new(ui::EditorView::new(Keymaps::new(keys)));
         compositor.push(editor_view);
 
@@ -277,6 +281,7 @@ impl Application {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
             scroll: None,
+            keymap_config: &self.config.load().keys,
         };
 
         // Acquire mutable access to the redraw_handle lock
@@ -542,6 +547,7 @@ impl Application {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
             scroll: None,
+            keymap_config: &self.config.load().keys,
         };
         let should_render = self.compositor.handle_event(&Event::IdleTimeout, &mut cx);
         if should_render || self.editor.needs_redraw {
@@ -662,6 +668,7 @@ impl Application {
             editor: &mut self.editor,
             jobs: &mut self.jobs,
             scroll: None,
+            keymap_config: &self.config.load().keys,
         };
         // Handle key events
         let should_redraw = match event.unwrap() {

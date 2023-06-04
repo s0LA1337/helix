@@ -52,6 +52,7 @@ use movement::Movement;
 use crate::{
     args,
     compositor::{self, Component, Compositor},
+    config::KeymapConfig,
     filter_picker_entry,
     job::Callback,
     keymap::ReverseKeymap,
@@ -85,6 +86,7 @@ pub struct Context<'a> {
     pub register: Option<char>,
     pub count: Option<NonZeroUsize>,
     pub editor: &'a mut Editor,
+    pub keymap_config: &'a KeymapConfig,
 
     pub callback: Option<crate::compositor::Callback>,
     pub on_next_key_callback: Option<OnKeyCallback>,
@@ -200,6 +202,7 @@ impl MappableCommand {
                         editor: cx.editor,
                         jobs: cx.jobs,
                         scroll: None,
+                        keymap_config: cx.keymap_config,
                     };
                     if let Err(e) = (command.fun)(&mut cx, &args[..], PromptEvent::Validate) {
                         cx.editor.set_error(format!("{}", e));
@@ -248,6 +251,8 @@ impl MappableCommand {
         move_next_long_word_start, "Move to start of next long word",
         move_prev_long_word_start, "Move to start of previous long word",
         move_next_long_word_end, "Move to end of next long word",
+        move_parent_node_end, "Move to end of the parent node",
+        move_parent_node_start, "Move to beginning of the parent node",
         extend_next_word_start, "Extend to start of next word",
         extend_prev_word_start, "Extend to start of previous word",
         extend_next_word_end, "Extend to end of next word",
@@ -255,6 +260,8 @@ impl MappableCommand {
         extend_next_long_word_start, "Extend to start of next long word",
         extend_prev_long_word_start, "Extend to start of previous long word",
         extend_next_long_word_end, "Extend to end of next long word",
+        extend_parent_node_end, "Extend to end of the parent node",
+        extend_parent_node_start, "Extend to beginning of the parent node",
         find_till_char, "Move till next occurrence of char",
         find_next_char, "Move to next occurrence of char",
         extend_till_char, "Extend till next occurrence of char",
@@ -2462,6 +2469,10 @@ fn insert_mode(cx: &mut Context) {
         .transform(|range| Range::new(range.to(), range.from()));
 
     doc.set_selection(view.id, selection);
+
+    // [TODO] temporary workaround until we're not using the idle timer to
+    //        trigger auto completions any more
+    cx.editor.clear_idle_timer();
 }
 
 // inserts at the end of each selection
@@ -2806,6 +2817,7 @@ pub fn command_palette(cx: &mut Context) {
                     callback: None,
                     on_next_key_callback: None,
                     jobs: cx.jobs,
+                    keymap_config: cx.keymap_config,
                 };
                 let focus = view!(ctx.editor).id;
 
@@ -3408,14 +3420,33 @@ pub mod insert {
     }
 
     pub fn insert_tab(cx: &mut Context) {
+        let (view, doc) = current_ref!(cx.editor);
+        let view_id = view.id;
+
+        if let Some(ref cmd) = cx.keymap_config.supertab {
+            let cursors_after_whitespace = doc.selection(view_id).ranges().iter().all(|range| {
+                let cursor = range.cursor(doc.text().slice(..));
+                let current_line_num = doc.text().char_to_line(cursor);
+                let current_line_start = doc.text().line_to_char(current_line_num);
+                let left = doc.text().slice(current_line_start..cursor);
+                log::debug!("left: {:?}", left);
+                left.chars().all(|c| c.is_whitespace())
+            });
+
+            if !cursors_after_whitespace {
+                cmd.execute(cx);
+                return;
+            }
+        }
+
         let (view, doc) = current!(cx.editor);
+
         // TODO: round out to nearest indentation level (for example a line with 3 spaces should
         // indent by one to reach 4 spaces).
-
         let indent = Tendril::from(doc.indent_style.as_str());
         let transaction = Transaction::insert(
             doc.text(),
-            &doc.selection(view.id).clone().cursors(doc.text().slice(..)),
+            &doc.selection(view_id).clone().cursors(doc.text().slice(..)),
             indent,
         );
         doc.apply(&transaction, view.id);
@@ -4602,6 +4633,50 @@ fn select_next_sibling(cx: &mut Context) {
 
 fn select_prev_sibling(cx: &mut Context) {
     select_sibling_impl(cx, &|node| Node::prev_sibling(&node))
+}
+
+fn move_node_bound_impl(cx: &mut Context, dir: Direction, movement: Movement) {
+    let motion = move |editor: &mut Editor| {
+        let (view, doc) = current!(editor);
+
+        if let Some(syntax) = doc.syntax() {
+            let text = doc.text().slice(..);
+            let current_selection = doc.selection(view.id);
+
+            let selection = movement::move_parent_node_end(
+                syntax,
+                text,
+                current_selection.clone(),
+                dir,
+                movement,
+            );
+
+            doc.set_selection(view.id, selection);
+
+            // [TODO] temporary workaround until we're not using the idle timer to
+            //        trigger auto completions any more
+            editor.clear_idle_timer();
+        }
+    };
+
+    motion(cx.editor);
+    cx.editor.last_motion = Some(Motion(Box::new(motion)));
+}
+
+pub fn move_parent_node_end(cx: &mut Context) {
+    move_node_bound_impl(cx, Direction::Forward, Movement::Move)
+}
+
+pub fn move_parent_node_start(cx: &mut Context) {
+    move_node_bound_impl(cx, Direction::Backward, Movement::Move)
+}
+
+pub fn extend_parent_node_end(cx: &mut Context) {
+    move_node_bound_impl(cx, Direction::Forward, Movement::Extend)
+}
+
+pub fn extend_parent_node_start(cx: &mut Context) {
+    move_node_bound_impl(cx, Direction::Backward, Movement::Extend)
 }
 
 fn match_brackets(cx: &mut Context) {

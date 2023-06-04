@@ -9,7 +9,12 @@ use std::{
 use anyhow::bail;
 use crossterm::event::{Event, KeyEvent};
 use helix_core::{diagnostic::Severity, test, Selection, Transaction};
-use helix_term::{application::Application, args::Args, config::Config, keymap::merge_keys};
+use helix_term::{
+    application::Application,
+    args::Args,
+    config::{Config, KeymapConfig},
+    keymap::merge_keys,
+};
 use helix_view::{current_ref, doc, editor::LspConfig, input::parse_macro, Editor};
 use tempfile::NamedTempFile;
 use tokio_stream::wrappers::UnboundedReceiverStream;
@@ -225,7 +230,7 @@ pub fn temp_file_with_contents<S: AsRef<str>>(
 pub fn test_config() -> Config {
     Config {
         editor: test_editor_config(),
-        keys: helix_term::keymap::default(),
+        keys: KeymapConfig::default(),
         ..Default::default()
     }
 }
@@ -303,8 +308,8 @@ impl AppBuilder {
     // Remove this attribute once `with_config` is used in a test:
     #[allow(dead_code)]
     pub fn with_config(mut self, mut config: Config) -> Self {
-        let keys = replace(&mut config.keys, helix_term::keymap::default());
-        merge_keys(&mut config.keys, keys);
+        let keys = replace(&mut config.keys.bindings, helix_term::keymap::default());
+        merge_keys(&mut config.keys.bindings, keys);
         self.config = config;
         self
     }
