@@ -15,6 +15,7 @@ mod spinner;
 mod statusline;
 mod text;
 mod tree;
+pub mod copilot_picker;
 
 use crate::compositor::{Component, Compositor};
 use crate::filter_picker_entry;
