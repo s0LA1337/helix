@@ -12,6 +12,7 @@ cl-lsp = { command = "cl-lsp", args = [ "stdio" ] }
 clangd = { command = "clangd" }
 clojure-lsp = { command = "clojure-lsp" }
 cmake-language-server = { command = "cmake-language-server" }
+copilot = { command = "copilot", args = ["--stdio"] }
 crystalline = { command = "crystalline", args = ["--stdio"] }
 cs = { command = "cs", args = ["launch", "--contrib", "smithy-language-server", "--", "0"] }
 cuelsp = { command = "cuelsp" }
@@ -147,7 +148,7 @@ file-types = ["rs"]
 roots = ["Cargo.toml", "Cargo.lock"]
 auto-format = true
 comment-token = "//"
-language-servers = [ "rust-analyzer" ]
+language-servers = [ "rust-analyzer", "copilot" ]
 indent = { tab-width = 4, unit = "    " }
 
 [language.auto-pairs]
@@ -306,7 +307,7 @@ injection-regex = "c"
 file-types = ["c"] # TODO: ["h"]
 roots = []
 comment-token = "//"
-language-servers = [ "clangd" ]
+language-servers = [ "clangd", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 
 [language.debugger]
@@ -343,7 +344,7 @@ injection-regex = "cpp"
 file-types = ["cc", "hh", "c++", "cpp", "hpp", "h", "ipp", "tpp", "cxx", "hxx", "ixx", "txx", "ino", "C", "H", "cu", "cuh"]
 roots = []
 comment-token = "//"
-language-servers = [ "clangd" ]
+language-servers = [ "clangd", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 
 [language.debugger]
@@ -424,7 +425,7 @@ file-types = ["go"]
 roots = ["go.work", "go.mod"]
 auto-format = true
 comment-token = "//"
-language-servers = [ "gopls" ]
+language-servers = [ "gopls", "copilot" ]
 # TODO: gopls needs utf-8 offsets?
 indent = { tab-width = 4, unit = "\t" }
 
@@ -471,7 +472,7 @@ file-types = ["go.mod"]
 roots = []
 auto-format = true
 comment-token = "//"
-language-servers = [ "gopls" ]
+language-servers = [ "gopls", "copilot" ]
 indent = { tab-width = 4, unit = "\t" }
 
 [[grammar]]
@@ -500,7 +501,7 @@ file-types = ["go.work"]
 roots = []
 auto-format = true
 comment-token = "//"
-language-servers = [ "gopls" ]
+language-servers = [ "gopls", "copilot" ]
 indent = { tab-width = 4, unit = "\t" }
 
 [[grammar]]
@@ -517,7 +518,7 @@ shebangs = ["node"]
 roots = []
 comment-token = "//"
 # TODO: highlights-params
-language-servers = [ "typescript-language-server" ]
+language-servers = [ "typescript-language-server", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 
 [language.debugger]
@@ -544,7 +545,7 @@ language-id = "javascriptreact"
 file-types = ["jsx"]
 roots = []
 comment-token = "//"
-language-servers = [ "typescript-language-server" ]
+language-servers = [ "typescript-language-server", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 grammar = "javascript"
 
@@ -557,7 +558,7 @@ language-id = "typescript"
 shebangs = []
 roots = []
 # TODO: highlights-params
-language-servers = [ "typescript-language-server" ]
+language-servers = [ "typescript-language-server", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
@@ -585,7 +586,7 @@ scope = "source.css"
 injection-regex = "css"
 file-types = ["css", "scss"]
 roots = []
-language-servers = [ "vscode-css-language-server" ]
+language-servers = [ "vscode-css-language-server", "copilot" ]
 auto-format = true
 indent = { tab-width = 2, unit = "  " }
 
@@ -666,7 +667,7 @@ file-types = ["nix"]
 shebangs = []
 roots = []
 comment-token = "#"
-language-servers = [ "nil" ]
+language-servers = [ "nil", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
@@ -971,7 +972,7 @@ file-types = ["zig"]
 roots = ["build.zig"]
 auto-format = true
 comment-token = "//"
-language-servers = [ "zls" ]
+language-servers = [ "zls", "copilot" ]
 indent = { tab-width = 4, unit = "    " }
 formatter = { command = "zig" , args = ["fmt", "--stdin"] }
 
@@ -1031,7 +1032,7 @@ file-types = ["cmake", "CMakeLists.txt"]
 roots = []
 comment-token = "#"
 indent = { tab-width = 2, unit = "  " }
-language-servers = [ "cmake-language-server" ]
+language-servers = [ "cmake-language-server", "copilot" ]
 injection-regex = "cmake"
 
 [[grammar]]
@@ -1864,7 +1865,7 @@ injection-regex = "(clojure|clj|edn|boot)"
 file-types = ["clj", "cljs", "cljc", "clje", "cljr", "cljx", "edn", "boot"]
 roots = ["project.clj", "build.boot", "deps.edn", "shadow-cljs.edn"]
 comment-token = ";"
-language-servers = [ "clojure-lsp" ]
+language-servers = [ "clojure-lsp", "copilot" ]
 indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
