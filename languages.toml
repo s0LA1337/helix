@@ -149,7 +149,7 @@ file-types = ["rs"]
 roots = ["Cargo.toml", "Cargo.lock"]
 auto-format = true
 comment-token = "//"
-language-servers = [ "rust-analyzer", "copilot" ]
+language-servers = [ "rust-analyzer"]
 indent = { tab-width = 4, unit = "    " }
 
 [language.auto-pairs]
@@ -308,7 +308,7 @@ injection-regex = "c"
 file-types = ["c"] # TODO: ["h"]
 roots = []
 comment-token = "//"
-language-servers = [ "clangd", "copilot" ]
+language-servers = [ "clangd"]
 indent = { tab-width = 2, unit = "  " }
 
 [language.debugger]
@@ -345,7 +345,7 @@ injection-regex = "cpp"
 file-types = ["cc", "hh", "c++", "cpp", "hpp", "h", "ipp", "tpp", "cxx", "hxx", "ixx", "txx", "ino", "C", "H", "cu", "cuh"]
 roots = []
 comment-token = "//"
-language-servers = [ "clangd", "copilot" ]
+language-servers = [ "clangd"]
 indent = { tab-width = 2, unit = "  " }
 
 [language.debugger]
@@ -426,7 +426,7 @@ file-types = ["go"]
 roots = ["go.work", "go.mod"]
 auto-format = true
 comment-token = "//"
-language-servers = [ "gopls", "copilot" ]
+language-servers = [ "gopls"]
 # TODO: gopls needs utf-8 offsets?
 indent = { tab-width = 4, unit = "\t" }
 
@@ -473,7 +473,7 @@ file-types = ["go.mod"]
 roots = []
 auto-format = true
 comment-token = "//"
-language-servers = [ "gopls", "copilot" ]
+language-servers = [ "gopls"]
 indent = { tab-width = 4, unit = "\t" }
 
 [[grammar]]
@@ -502,7 +502,7 @@ file-types = ["go.work"]
 roots = []
 auto-format = true
 comment-token = "//"
-language-servers = [ "gopls", "copilot" ]
+language-servers = [ "gopls"]
 indent = { tab-width = 4, unit = "\t" }
 
 [[grammar]]
@@ -519,7 +519,7 @@ shebangs = ["node"]
 roots = []
 comment-token = "//"
 # TODO: highlights-params
-language-servers = [ "typescript-language-server", "copilot" ]
+language-servers = [ "typescript-language-server"]
 indent = { tab-width = 2, unit = "  " }
 
 [language.debugger]
@@ -546,7 +546,7 @@ language-id = "javascriptreact"
 file-types = ["jsx"]
 roots = []
 comment-token = "//"
-language-servers = [ "typescript-language-server", "copilot" ]
+language-servers = [ "typescript-language-server"]
 indent = { tab-width = 2, unit = "  " }
 grammar = "javascript"
 
@@ -559,7 +559,7 @@ language-id = "typescript"
 shebangs = []
 roots = []
 # TODO: highlights-params
-language-servers = [ "typescript-language-server", "copilot" ]
+language-servers = [ "typescript-language-server"]
 indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
@@ -587,7 +587,7 @@ scope = "source.css"
 injection-regex = "css"
 file-types = ["css", "scss"]
 roots = []
-language-servers = [ "vscode-css-language-server", "copilot" ]
+language-servers = [ "vscode-css-language-server"]
 auto-format = true
 indent = { tab-width = 2, unit = "  " }
 
@@ -668,7 +668,7 @@ file-types = ["nix"]
 shebangs = []
 roots = []
 comment-token = "#"
-language-servers = [ "nil", "copilot" ]
+language-servers = [ "nil"]
 indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
@@ -973,7 +973,7 @@ file-types = ["zig"]
 roots = ["build.zig"]
 auto-format = true
 comment-token = "//"
-language-servers = [ "zls", "copilot" ]
+language-servers = [ "zls"]
 indent = { tab-width = 4, unit = "    " }
 formatter = { command = "zig" , args = ["fmt", "--stdin"] }
 
@@ -1033,7 +1033,7 @@ file-types = ["cmake", "CMakeLists.txt"]
 roots = []
 comment-token = "#"
 indent = { tab-width = 2, unit = "  " }
-language-servers = [ "cmake-language-server", "copilot" ]
+language-servers = [ "cmake-language-server"]
 injection-regex = "cmake"
 
 [[grammar]]
@@ -1866,7 +1866,7 @@ injection-regex = "(clojure|clj|edn|boot)"
 file-types = ["clj", "cljs", "cljc", "clje", "cljr", "cljx", "edn", "boot"]
 roots = ["project.clj", "build.boot", "deps.edn", "shadow-cljs.edn"]
 comment-token = ";"
-language-servers = [ "clojure-lsp", "copilot" ]
+language-servers = [ "clojure-lsp"]
 indent = { tab-width = 2, unit = "  " }
 
 [[grammar]]
