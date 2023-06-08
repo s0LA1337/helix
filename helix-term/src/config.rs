@@ -164,7 +164,6 @@ mod tests {
     #[test]
     fn parsing_keymaps_config_file() {
         use crate::keymap;
-        use crate::keymap::Keymap;
         use helix_core::hashmap;
         use helix_view::document::Mode;
 
@@ -182,13 +181,13 @@ mod tests {
         merge_keys(
             &mut keymap_config.bindings,
             hashmap! {
-                Mode::Insert => Keymap::new(keymap!({ "Insert mode"
+                Mode::Insert => keymap!({ "Insert mode"
                     "y" => move_line_down,
                     "S-C-a" => delete_selection,
-                })),
-                Mode::Normal => Keymap::new(keymap!({ "Normal mode"
+                }),
+                Mode::Normal => keymap!({ "Normal mode"
                     "A-F12" => move_next_word_end,
-                })),
+                }),
             },
         );
 

@@ -253,6 +253,7 @@ impl MappableCommand {
         move_next_long_word_end, "Move to end of next long word",
         move_parent_node_end, "Move to end of the parent node",
         move_parent_node_start, "Move to beginning of the parent node",
+        move_prev_long_word_end, "Move to end of previous long word",
         extend_next_word_start, "Extend to start of next word",
         extend_prev_word_start, "Extend to start of previous word",
         extend_next_word_end, "Extend to end of next word",
@@ -262,6 +263,7 @@ impl MappableCommand {
         extend_next_long_word_end, "Extend to end of next long word",
         extend_parent_node_end, "Extend to end of the parent node",
         extend_parent_node_start, "Extend to beginning of the parent node",
+        extend_prev_long_word_end, "Extend to end of prev long word",
         find_till_char, "Move till next occurrence of char",
         find_next_char, "Move to next occurrence of char",
         extend_till_char, "Extend till next occurrence of char",
@@ -1078,6 +1080,10 @@ fn move_prev_long_word_start(cx: &mut Context) {
     move_word_impl(cx, movement::move_prev_long_word_start)
 }
 
+fn move_prev_long_word_end(cx: &mut Context) {
+    move_word_impl(cx, movement::move_prev_long_word_end)
+}
+
 fn move_next_long_word_end(cx: &mut Context) {
     move_word_impl(cx, movement::move_next_long_word_end)
 }
@@ -1233,6 +1239,10 @@ fn extend_next_long_word_start(cx: &mut Context) {
 
 fn extend_prev_long_word_start(cx: &mut Context) {
     extend_word_impl(cx, movement::move_prev_long_word_start)
+}
+
+fn extend_prev_long_word_end(cx: &mut Context) {
+    extend_word_impl(cx, movement::move_prev_long_word_end)
 }
 
 fn extend_next_long_word_end(cx: &mut Context) {
@@ -2830,6 +2840,9 @@ impl ui::menu::Item for MappableCommand {
 }
 
 pub fn command_palette(cx: &mut Context) {
+    let register = cx.register;
+    let count = cx.count;
+
     cx.callback = Some(Box::new(
         move |compositor: &mut Compositor, cx: &mut compositor::Context| {
             let keymap = compositor.find::<ui::EditorView>().unwrap().keymaps.map()
@@ -2847,8 +2860,8 @@ pub fn command_palette(cx: &mut Context) {
 
             let picker = Picker::new(commands, keymap, None, move |cx, command, _action| {
                 let mut ctx = Context {
-                    register: None,
-                    count: std::num::NonZeroUsize::new(1),
+                    register,
+                    count,
                     editor: cx.editor,
                     callback: None,
                     on_next_key_callback: None,
