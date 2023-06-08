@@ -1,5 +1,5 @@
 use crate::keymap::{self, MappableCommand};
-use crate::keymap::{merge_keys, Keymap};
+use crate::keymap::{merge_keys, KeyTrie};
 use helix_loader::merge_toml_values;
 use helix_view::document::Mode;
 use serde::Deserialize;
@@ -33,7 +33,7 @@ pub struct KeymapConfig {
     pub supertab: Option<MappableCommand>,
 
     #[serde(flatten)]
-    pub bindings: HashMap<Mode, Keymap>,
+    pub bindings: HashMap<Mode, KeyTrie>,
 }
 
 impl Default for KeymapConfig {
