@@ -39,7 +39,7 @@ use helix_view::{
     info::Info,
     input::KeyEvent,
     keyboard::KeyCode,
-    tree,
+    tree::{self, Dimension, Resize},
     view::View,
     Document, DocumentId, Editor, ViewId,
 };
@@ -359,6 +359,11 @@ impl MappableCommand {
         goto_prev_change, "Goto previous change",
         goto_first_change, "Goto first change",
         goto_last_change, "Goto last change",
+        grow_buffer_width, "Grow focused container width",
+        shrink_buffer_width, "Shrink focused container width",
+        grow_buffer_height, "Grow focused container height",
+        shrink_buffer_height, "Shrink focused container height",
+        buffer_expand_mode, "Enable expand mode on buffer",
         goto_line_start, "Goto line start",
         goto_line_end, "Goto line end",
         goto_next_buffer, "Goto next buffer",
@@ -770,6 +775,25 @@ fn goto_line_start(cx: &mut Context) {
             Movement::Move
         },
     )
+}
+
+fn grow_buffer_width(cx: &mut Context) {
+    cx.editor.resize_buffer(Resize::Grow, Dimension::Width);
+}
+
+fn shrink_buffer_width(cx: &mut Context) {
+    cx.editor.resize_buffer(Resize::Shrink, Dimension::Width);
+}
+fn grow_buffer_height(cx: &mut Context) {
+    cx.editor.resize_buffer(Resize::Grow, Dimension::Height);
+}
+
+fn shrink_buffer_height(cx: &mut Context) {
+    cx.editor.resize_buffer(Resize::Shrink, Dimension::Height);
+}
+
+fn buffer_expand_mode(cx: &mut Context) {
+    cx.editor.buffer_expand_mode();
 }
 
 fn goto_next_buffer(cx: &mut Context) {
