@@ -7,7 +7,6 @@ use crate::{
     info::Info,
     input::KeyEvent,
     theme::{self, Theme},
-    tree::{self, Tree},
     view::ViewPosition,
     tree::{self, Dimension, Resize, Tree},
     Align, Document, DocumentId, View, ViewId,
