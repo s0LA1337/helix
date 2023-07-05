@@ -2619,3 +2619,16 @@ indent = { tab-width = 2, unit = "  " }
 [[grammar]]
 name = "t32"
 source = { git = "https://codeberg.org/xasc/tree-sitter-t32", rev = "1dd98248b01e4a3933c1b85b58bab0875e2ba437" }
+
+[[language]]
+name = "vale"
+scope = "source.vale"
+injection-regex = "vale"
+file-types = ["vale"]
+roots = []
+comment-token = "//"
+indent = { tab-width = 2, unit = "  " }
+
+[[grammar]]
+name = "vale"
+source = { git = "https://github.com/gurpreetsingh-exe/tree-sitter-vale", rev = "4c6d3ff67825133935ffde011f2d8e2b12cf8b94" }
