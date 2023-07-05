@@ -1,37 +1,34 @@
-((identifier) @variable)
 (type_identifier) @type
 ((field_identifier) @variable.other.member)
 
-(parameter
- name: (identifier) @variable.parameter)
+(parameter name: (identifier) @variable.parameter)
 
-(scoped_identifier
- path: (identifier) @namespace)
+(scoped_identifier path: (identifier) @namespace)
+
+(call_expr function: (field_expr  field: (field_identifier) @function))
 
 (
- (call_expr 
-  function: (identifier) @function)
- ; (#match? @function "^[a-z]+([A-Za-z0-9_]*)+$")
+ [
+  (func_header name: (identifier) @function)
+  (generic_function function: (identifier) @function)
+  (call_expr function: (identifier) @function)
+ ]
+ (#match? @function "^[a-z]+([A-Za-z0-9_]+)*$")
 )
 
 (
- (call_expr
-  function: (field_expr 
-   field: (field_identifier) @function))
- ; (#match? @function "^[a-z]+([A-Za-z0-9_]*)+$")
-)
-
-(
-(generic_function
- function: (identifier) @constructor)
- ; (#match? @constructor "^[A-Z]+([A-Za-z0-9_]*)+$")
+ [
+  (call_expr function: (identifier))
+  (generic_function function: (identifier))
+  (func_header name: (identifier))
+ ] @constructor
+ (#match? @constructor "^[A-Z]+([a-z]+[A-Z0-9_]*)*$")
 )
 
 (rune) @type
 
-(identifier) @type (#match? @type "^[A-Z]")
+((identifier) @type (#match? @type "^[A-Z]"))
 
-(func_header name: (identifier) @function)
 (struct_definition (type_identifier)) @struct
 
 (attribute (attribute_name) @function.macro .)
@@ -118,7 +115,6 @@
  "exported"
  "struct"
 ] @keyword.storage.type
-
 
 (static_array_type ["#"] @punctuation.special)
 (attribute ["#" "!"] @punctuation.special)
