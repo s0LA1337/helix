@@ -1,23 +1,37 @@
 ((identifier) @variable)
 (type_identifier) @type
 ((field_identifier) @variable.other.member)
-(parameter name: (identifier) @variable.parameter)
 
-(scoped_identifier path: (identifier)) @namespace
+(parameter
+ name: (identifier) @variable.parameter)
 
-(call_expr function: (identifier)) @function
+(scoped_identifier
+ path: (identifier) @namespace)
 
-(call_expr function: 
- (field_expr field: 
-  (field_identifier))) @function
+(
+ (call_expr 
+  function: (identifier) @function)
+ ; (#match? @function "^[a-z]+([A-Za-z0-9_]*)+$")
+)
 
-(generic_function function: (identifier)) @constructor
+(
+ (call_expr
+  function: (field_expr 
+   field: (field_identifier) @function))
+ ; (#match? @function "^[a-z]+([A-Za-z0-9_]*)+$")
+)
+
+(
+(generic_function
+ function: (identifier) @constructor)
+ ; (#match? @constructor "^[A-Z]+([A-Za-z0-9_]*)+$")
+)
 
 (rune) @type
 
 (identifier) @type (#match? @type "^[A-Z]")
 
-(func_header (identifier)) @function
+(func_header name: (identifier) @function)
 (struct_definition (type_identifier)) @struct
 
 (attribute (attribute_name) @function.macro .)
