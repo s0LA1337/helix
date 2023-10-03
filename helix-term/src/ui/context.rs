@@ -148,9 +148,9 @@ pub fn calculate_sticky_nodes(
     }
 
     while start_node
-        .unwrap_or(tree.root_node())
+        .unwrap_or_else(|| tree.root_node())
         .parent()
-        .unwrap_or(tree.root_node())
+        .unwrap_or_else(|| tree.root_node())
         .byte_range()
         != tree.root_node().byte_range()
     {
@@ -176,7 +176,7 @@ pub fn calculate_sticky_nodes(
     let query = &context_nodes.query;
     let query_nodes = cursor.matches(
         query,
-        start_node.unwrap_or(tree.root_node()),
+        start_node.unwrap_or_else(|| tree.root_node()),
         RopeProvider(text),
     );
 
@@ -265,7 +265,7 @@ pub fn calculate_sticky_nodes(
         });
     }
 
-    return Some(res);
+    Some(res)
 }
 
 /// Render the sticky context
@@ -277,8 +277,8 @@ pub fn render_sticky_context(
     theme: &Theme,
 ) {
     let Some(context) = context else {
-            return;
-        };
+        return;
+    };
 
     let text = doc.text().slice(..);
     let viewport = view.inner_area(doc);
