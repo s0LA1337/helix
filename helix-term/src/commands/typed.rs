@@ -961,7 +961,7 @@ fn yank_main_selection_to_clipboard(
         return Ok(());
     }
 
-    yank_primary_selection_impl(cx.editor, '*');
+    yank_primary_selection_impl(cx.editor, '+');
     Ok(())
 }
 
@@ -996,7 +996,7 @@ fn yank_joined_to_clipboard(
     let doc = doc!(cx.editor);
     let default_sep = Cow::Borrowed(doc.line_ending.as_str());
     let separator = args.first().unwrap_or(&default_sep);
-    yank_joined_impl(cx.editor, separator, '*');
+    yank_joined_impl(cx.editor, separator, '+');
     Ok(())
 }
 
@@ -1009,7 +1009,7 @@ fn yank_main_selection_to_primary_clipboard(
         return Ok(());
     }
 
-    yank_primary_selection_impl(cx.editor, '+');
+    yank_primary_selection_impl(cx.editor, '*');
     Ok(())
 }
 
@@ -1025,7 +1025,7 @@ fn yank_joined_to_primary_clipboard(
     let doc = doc!(cx.editor);
     let default_sep = Cow::Borrowed(doc.line_ending.as_str());
     let separator = args.first().unwrap_or(&default_sep);
-    yank_joined_impl(cx.editor, separator, '+');
+    yank_joined_impl(cx.editor, separator, '*');
     Ok(())
 }
 
@@ -1038,7 +1038,7 @@ fn paste_clipboard_after(
         return Ok(());
     }
 
-    paste(cx.editor, '*', Paste::After, 1);
+    paste(cx.editor, '+', Paste::After, 1);
     Ok(())
 }
 
@@ -1051,7 +1051,7 @@ fn paste_clipboard_before(
         return Ok(());
     }
 
-    paste(cx.editor, '*', Paste::Before, 1);
+    paste(cx.editor, '+', Paste::Before, 1);
     Ok(())
 }
 
@@ -1064,7 +1064,7 @@ fn paste_primary_clipboard_after(
         return Ok(());
     }
 
-    paste(cx.editor, '+', Paste::After, 1);
+    paste(cx.editor, '*', Paste::After, 1);
     Ok(())
 }
 
@@ -1077,7 +1077,7 @@ fn paste_primary_clipboard_before(
         return Ok(());
     }
 
-    paste(cx.editor, '+', Paste::Before, 1);
+    paste(cx.editor, '*', Paste::Before, 1);
     Ok(())
 }
 
@@ -1090,7 +1090,7 @@ fn replace_selections_with_clipboard(
         return Ok(());
     }
 
-    replace_with_yanked_impl(cx.editor, '*', 1);
+    replace_with_yanked_impl(cx.editor, '+', 1);
     Ok(())
 }
 
@@ -1103,7 +1103,7 @@ fn replace_selections_with_primary_clipboard(
         return Ok(());
     }
 
-    replace_with_yanked_impl(cx.editor, '+', 1);
+    replace_with_yanked_impl(cx.editor, '*', 1);
     Ok(())
 }
 
