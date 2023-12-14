@@ -327,6 +327,8 @@ pub struct Config {
     pub popup_border: PopupBorderConfig,
     /// Whether to render rainbow highlights. Defaults to `false`.
     pub rainbow_brackets: bool,
+    /// How often a timeout pass has been reached until a new checkpoint is made
+    pub timeout_passes: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Eq, PartialOrd, Ord)]
@@ -958,6 +960,7 @@ impl Default for Config {
             smart_tab: Some(SmartTabConfig::default()),
             popup_border: PopupBorderConfig::None,
             rainbow_brackets: false,
+            timeout_passes: None,
         }
     }
 }

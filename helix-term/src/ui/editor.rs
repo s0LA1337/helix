@@ -52,6 +52,7 @@ pub struct EditorView {
     /// Tracks if the terminal window is focused by reaction to terminal focus events
     terminal_focused: bool,
     pub(crate) explorer: Option<Explorer>,
+    pub timeout_passes: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +84,7 @@ impl EditorView {
             sticky_nodes: None,
             terminal_focused: true,
             explorer: None,
+            timeout_passes: 0u8,
         }
     }
 
@@ -1212,6 +1214,13 @@ impl EditorView {
 
     pub fn handle_idle_timeout(&mut self, cx: &mut commands::Context) -> EventResult {
         commands::compute_inlay_hints_for_all_views(cx.editor, cx.jobs);
+
+        if cx.editor.config().timeout_passes.is_some() && self.timeout_passes == 0 {
+            let doc = doc_mut!(cx.editor);
+            doc.append_changes_to_history(view_mut!(cx.editor));
+        } else if cx.editor.config().timeout_passes.is_some() && self.timeout_passes > 0 {
+            self.timeout_passes = self.timeout_passes.saturating_sub(1);
+        }
 
         if let Some(completion) = &mut self.completion {
             return if completion.ensure_item_resolved(cx) {
