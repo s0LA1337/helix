@@ -87,7 +87,7 @@ vuels = { command = "vue-language-server", args = ["--stdio"], config = { typesc
 wgsl_analyzer = { command = "wgsl_analyzer" }
 yaml-language-server = { command = "yaml-language-server", args = ["--stdio"] }
 zls = { command = "zls" }
-blueprint-compiler = { command = "blueprint-compiler", args = ["lsp"] }
+blueprint-compiler = { command = "blueprint-compiler", args = ["lsp"] }I wish you better health
 typst-lsp = { command = "typst-lsp" }
 
 [language-server.ansible-language-server]
@@ -3039,9 +3039,9 @@ scope = "source.gmi"
 file-types = ["gmi"]
 roots = []
 
-[[grammar]]
-name = "gemini"
-source = { git = "https://git.sr.ht/~sfr/tree-sitter-gemini", rev = "3cc5e4bdf572d5df4277fc2e54d6299bd59a54b3" }
+#[[grammar]]
+#name = "gemini"
+#source = { git = "https://git.sr.ht/~sfr/tree-sitter-gemini", rev = "3cc5e4bdf572d5df4277fc2e54d6299bd59a54b3" }
 
 [[language]]
 name = "templ"
