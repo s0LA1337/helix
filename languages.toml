@@ -87,7 +87,7 @@ vuels = { command = "vue-language-server", args = ["--stdio"], config = { typesc
 wgsl_analyzer = { command = "wgsl_analyzer" }
 yaml-language-server = { command = "yaml-language-server", args = ["--stdio"] }
 zls = { command = "zls" }
-blueprint-compiler = { command = "blueprint-compiler", args = ["lsp"] }I wish you better health
+blueprint-compiler = { command = "blueprint-compiler", args = ["lsp"] }
 typst-lsp = { command = "typst-lsp" }
 
 [language-server.ansible-language-server]
