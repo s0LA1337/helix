@@ -336,7 +336,8 @@ pub fn render_sticky_context(
         } = visual_coords_at_pos(first_node_line, first_node_line_end, doc.tab_width());
 
         // get the highlighting of the basic capture
-        let highlights = EditorView::doc_syntax_highlights(doc, node_start, 1, theme);
+        let syntax_highlights = EditorView::doc_syntax_highlights(doc, node_start, 1, theme);
+        let overlay_highlights = EditorView::empty_highlight_iter(doc, node_start, 1);
 
         let mut offset_area = context_area;
 
@@ -357,7 +358,8 @@ pub fn render_sticky_context(
                 },
                 &formatting,
                 &TextAnnotations::default(),
-                highlights,
+                syntax_highlights,
+                overlay_highlights,
                 theme,
                 &mut [],
                 &mut [],
@@ -390,7 +392,9 @@ pub fn render_sticky_context(
 
             let mut renderer = TextRenderer::new(surface, doc, theme, end_vis_offset, offset_area);
 
-            let highlights = EditorView::doc_syntax_highlights(doc, node_end, 1, theme);
+            let syntax_highlights = EditorView::doc_syntax_highlights(doc, node_end, 1, theme);
+            let overlay_highlights = EditorView::empty_highlight_iter(doc, node_end, 1);
+
             let mut formatting = doc.text_format(offset_area.width, Some(theme));
             formatting.soft_wrap = false;
 
@@ -403,7 +407,8 @@ pub fn render_sticky_context(
                 },
                 &formatting,
                 &TextAnnotations::default(),
-                highlights,
+                syntax_highlights,
+                overlay_highlights,
                 theme,
                 &mut [],
                 &mut [],

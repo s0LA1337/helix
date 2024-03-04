@@ -36,9 +36,9 @@ use tui::{buffer::Buffer as Surface, text::Span};
 use super::{
     completion::CompletionItem,
     context::{self, StickyNode},
+    document::LineDecoration,
     statusline,
 };
-use super::{document::LineDecoration, lsp::SignatureHelp};
 
 pub struct EditorView {
     pub keymaps: Keymaps,
