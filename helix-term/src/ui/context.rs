@@ -8,7 +8,9 @@ use helix_core::{
     Position,
 };
 
-use helix_view::{editor::Config, graphics::Rect, view::ViewPosition, Document, Theme, View};
+use helix_view::{
+    editor::Config, graphics::Rect, view::ViewPosition, Document, Theme, View, ViewId,
+};
 
 use tui::buffer::Buffer as Surface;
 
@@ -25,6 +27,7 @@ pub struct StickyNode {
     pub indicator: Option<String>,
     pub anchor: usize,
     pub has_context_end: bool,
+    pub view_id: ViewId,
 }
 
 #[derive(Debug)]
@@ -105,17 +108,26 @@ pub fn calculate_sticky_nodes(
 
     // nothing has changed, so the cached result can be returned
     if let Some(nodes) = nodes {
-        if nodes.iter().any(|node| view.offset.anchor == node.anchor) {
+        if nodes
+            .iter()
+            .any(|node| view.offset.anchor == node.anchor && view.id == node.view_id)
+        {
             return Some(nodes.iter().take(context.visual_row).cloned().collect());
         }
 
-        cached_nodes = nodes.clone();
+        cached_nodes = nodes.to_vec();
         if let Some(popped) = cached_nodes.pop() {
             if popped.indicator.is_some() {
                 _ = cached_nodes.pop();
             }
         }
-        _ = cached_nodes.pop();
+
+        while cached_nodes
+            .last()
+            .is_some_and(|node| node.line > context.context_location)
+        {
+            _ = cached_nodes.pop();
+        }
     }
 
     let start_byte_range = cached_nodes
@@ -132,7 +144,7 @@ pub fn calculate_sticky_nodes(
 
     let mut start_node = tree
         .root_node()
-        .descendant_for_byte_range(start_byte, start_byte + 1);
+        .descendant_for_byte_range(start_byte, start_byte.saturating_sub(1));
 
     if let Some(start_node) = start_node {
         if start_node.byte_range() == tree.root_node().byte_range() {
@@ -190,7 +202,7 @@ pub fn calculate_sticky_nodes(
                 &node_byte_range.clone(),
                 context.context_location,
                 context.topmost_byte,
-                result.len(),
+                result.len() + cached_nodes.len(),
             ) {
                 continue;
             }
@@ -205,12 +217,17 @@ pub fn calculate_sticky_nodes(
                 indicator: None,
                 anchor: view.offset.anchor,
                 has_context_end: node_byte_range.is_some(),
+                view_id: view.id,
             });
         }
     }
     // result should be filled by now
     if result.is_empty() {
         if !cached_nodes.is_empty() {
+            if config.sticky_context.indicator {
+                return Some(add_indicator(&context.viewport, view, cached_nodes));
+            }
+
             return Some(cached_nodes);
         }
 
@@ -293,6 +310,7 @@ fn get_context_paired_range(
         })
 }
 
+/// Tests whether or not a given node is in a specific tree-sitter range
 fn node_in_range(
     node: Node,
     anchor: usize,
@@ -306,6 +324,7 @@ fn node_in_range(
         && node_byte_range.is_none()
 }
 
+/// Adds an indicator line to the Sticky Context
 fn add_indicator(viewport: &Rect, view: &View, res: Vec<StickyNode>) -> Vec<StickyNode> {
     let mut res = res;
     let str = "─".repeat(viewport.width as usize);
@@ -316,6 +335,7 @@ fn add_indicator(viewport: &Rect, view: &View, res: Vec<StickyNode>) -> Vec<Stic
         indicator: Some(str),
         anchor: view.offset.anchor,
         has_context_end: false,
+        view_id: view.id,
     });
 
     res
