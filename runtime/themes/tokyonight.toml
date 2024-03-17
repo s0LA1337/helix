@@ -83,8 +83,8 @@ hint = { fg = "hint" }
 "ui.statusline.normal" = { bg = "blue", fg = "bg", modifiers = ["bold"] }
 "ui.statusline.insert" = { bg = "light-green", fg = "bg", modifiers = ["bold"] }
 "ui.statusline.select" = { bg = "magenta", fg = "bg", modifiers = ["bold"] }
-"ui.sticky.context" = { bg = "bg-menu" }
-"ui.sticky.indicator" = { fg = "comment", bg = "bg-menu" }
+"ui.sticky.context" = { bg = "fg-gutter" }
+"ui.sticky.indicator" = { fg = "comment", bg = "fg-gutter" }
 "ui.text" = { fg = "fg" }
 "ui.text.focus" = { bg = "bg-visual" }
 "ui.text.inactive" = { fg = "comment", modifiers = ["italic"] }
