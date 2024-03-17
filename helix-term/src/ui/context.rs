@@ -95,7 +95,7 @@ pub fn calculate_sticky_nodes(
     config: &Config,
     cursor_cache: &Option<Option<Position>>,
 ) -> Option<Vec<StickyNode>> {
-    let Some(context) = StickyNodeContext::from_context(nodes, doc, view, config, cursor_cache)
+    let Some(mut context) = StickyNodeContext::from_context(nodes, doc, view, config, cursor_cache)
     else {
         return None;
     };
@@ -104,31 +104,8 @@ pub fn calculate_sticky_nodes(
     let tree = syntax.tree();
     let text = doc.text().slice(..);
 
-    let mut cached_nodes: Vec<StickyNode> = Vec::new();
-
-    // nothing has changed, so the cached result can be returned
-    if let Some(nodes) = nodes {
-        if nodes
-            .iter()
-            .any(|node| view.offset.anchor == node.anchor && view.id == node.view_id)
-        {
-            return Some(nodes.iter().take(context.visual_row).cloned().collect());
-        }
-
-        cached_nodes = nodes.to_vec();
-        if let Some(popped) = cached_nodes.pop() {
-            if popped.indicator.is_some() {
-                _ = cached_nodes.pop();
-            }
-        }
-
-        while cached_nodes
-            .last()
-            .is_some_and(|node| node.line > context.context_location)
-        {
-            _ = cached_nodes.pop();
-        }
-    }
+    let mut cached_nodes =
+        build_cached_nodes(nodes, view, &mut context, text).unwrap_or(Vec::new());
 
     let start_byte_range = cached_nodes
         .last()
@@ -142,16 +119,19 @@ pub fn calculate_sticky_nodes(
         context.context_location
     };
 
+    let mut result: Vec<StickyNode> = Vec::new();
     let mut start_node = tree
         .root_node()
         .descendant_for_byte_range(start_byte, start_byte.saturating_sub(1));
 
+    // When the start_node is the root node... there's no point in searching further
     if let Some(start_node) = start_node {
         if start_node.byte_range() == tree.root_node().byte_range() {
             return None;
         }
     }
 
+    // Traverse to the parent node
     while start_node
         .unwrap_or_else(|| tree.root_node())
         .parent()
@@ -172,20 +152,18 @@ pub fn calculate_sticky_nodes(
         .capture_index_for_name("context.params")
         .unwrap_or(start_index);
 
-    // result is list of numbers of lines that should be rendered in the LSP context
-    let mut result: Vec<StickyNode> = Vec::new();
-
-    // only run the query from start to the cursor location
     let mut cursor = QueryCursor::new();
     cursor.set_byte_range(start_byte_range.start..context.context_location);
+
     let query = &context_nodes.query;
-    let query_nodes = cursor.matches(
+    // Collect the query, for further iteration
+    let query_matches = cursor.matches(
         query,
         start_node.unwrap_or_else(|| tree.root_node()),
         RopeProvider(text),
     );
 
-    for matched_node in query_nodes {
+    for matched_node in query_matches {
         // find @context.params nodes
         let node_byte_range = get_context_paired_range(
             &matched_node,
@@ -196,13 +174,23 @@ pub fn calculate_sticky_nodes(
         );
 
         for node in matched_node.nodes_for_capture_index(start_index) {
+            let mut last_node_add = 0;
+            if let Some(last_node) = result.last() {
+                if last_node.line == (node.start_position().row + 1) {
+                    last_node_add += text
+                        .line(text.byte_to_line(context.topmost_byte))
+                        .len_bytes()
+                        + 1;
+                }
+            }
+
             if node_in_range(
                 node,
                 context.anchor_line,
                 &node_byte_range.clone(),
                 context.context_location,
-                context.topmost_byte,
-                result.len() + cached_nodes.len(),
+                context.topmost_byte + last_node_add,
+                result.len(),
             ) {
                 continue;
             }
@@ -270,6 +258,50 @@ pub fn calculate_sticky_nodes(
     }
 
     Some(res)
+}
+
+fn build_cached_nodes(
+    nodes: &Option<Vec<StickyNode>>,
+    view: &View,
+    context: &mut StickyNodeContext,
+    text: helix_core::RopeSlice<'_>,
+) -> Option<Vec<StickyNode>> {
+    // nothing has changed, so the cached result can be returned
+    if let Some(nodes) = nodes {
+        if nodes
+            .iter()
+            .any(|node| view.offset.anchor == node.anchor && view.id == node.view_id)
+        {
+            return Some(nodes.iter().take(context.visual_row).cloned().collect());
+        }
+
+        let mut cached_nodes = nodes.to_vec();
+        // Pop the last node + indicator node (if it exists)
+        if let Some(popped) = cached_nodes.pop() {
+            if popped.indicator.is_some() {
+                _ = cached_nodes.pop();
+            }
+        }
+
+        // While the cached nodes are outside our search-range, pop them, too
+        while cached_nodes
+            .last()
+            .is_some_and(|node| node.byte_range.start >= context.topmost_byte)
+        {
+            let Some(popped) = cached_nodes.pop() else {
+                break;
+            };
+
+            context.topmost_byte = context.topmost_byte.saturating_sub(
+                text.line(text.byte_to_line(popped.byte_range.start))
+                    .len_bytes(),
+            );
+        }
+
+        return Some(cached_nodes);
+    }
+
+    None
 }
 
 fn get_context_paired_range(
