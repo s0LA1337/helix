@@ -107,6 +107,10 @@ pub fn calculate_sticky_nodes(
     let mut cached_nodes =
         build_cached_nodes(nodes, view, &mut context, text).unwrap_or(Vec::new());
 
+    if cached_nodes.iter().any(|node| node.view_id != view.id) {
+        cached_nodes.clear();
+    }
+
     let start_byte_range = cached_nodes
         .last()
         .unwrap_or(&StickyNode::default())
