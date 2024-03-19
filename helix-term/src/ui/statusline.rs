@@ -93,16 +93,22 @@ pub fn render_statusline<'a>(context: &mut RenderContext, width: usize) -> Spans
     let mut statusline: Vec<Span> = vec![];
 
     if center_area_width > 0 && total_space_required <= width {
-        let center_margin = (width - center_area_width) / 2;
+        let center_margin = (width.saturating_sub(center_area_width)) / 2;
         statusline.append(&mut left);
-        statusline.push(" ".repeat(center_margin - left_area_width).into());
+        statusline.push(
+            " ".repeat(center_margin.saturating_sub(left_area_width))
+                .into(),
+        );
         statusline.append(&mut center);
-        statusline.push(" ".repeat(center_margin - right_area_width).into());
+        statusline.push(
+            " ".repeat(center_margin.saturating_sub(right_area_width))
+                .into(),
+        );
         statusline.append(&mut right);
     } else if right_area_width > 0 && sides_space_required <= width {
         let side_areas_width = left_area_width + right_area_width;
         statusline.append(&mut left);
-        statusline.push(" ".repeat(width - side_areas_width).into());
+        statusline.push(" ".repeat(width.saturating_sub(side_areas_width)).into());
         statusline.append(&mut right);
     } else if left_area_width <= width {
         statusline.append(&mut left);
