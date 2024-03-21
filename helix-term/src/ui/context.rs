@@ -297,7 +297,7 @@ fn build_cached_nodes(
             };
 
             context.topmost_byte = context.topmost_byte.saturating_sub(
-                text.line(text.byte_to_line(popped.byte_range.start))
+                text.line(text.try_byte_to_line(popped.byte_range.start).ok()?)
                     .len_bytes(),
             );
         }
