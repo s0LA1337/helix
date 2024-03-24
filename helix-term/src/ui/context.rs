@@ -104,8 +104,7 @@ pub fn calculate_sticky_nodes(
     let tree = syntax.tree();
     let text = doc.text().slice(..);
 
-    let mut cached_nodes =
-        build_cached_nodes(nodes, view, &mut context, text).unwrap_or(Vec::new());
+    let mut cached_nodes = build_cached_nodes(nodes, view, &mut context).unwrap_or(Vec::new());
 
     if cached_nodes.iter().any(|node| node.view_id != view.id) {
         cached_nodes.clear();
@@ -183,8 +182,7 @@ pub fn calculate_sticky_nodes(
                 if last_node.line == (node.start_position().row + 1) {
                     last_node_add += text
                         .line(text.byte_to_line(context.topmost_byte))
-                        .len_bytes()
-                        + 1;
+                        .len_bytes();
                 }
             }
 
@@ -268,7 +266,6 @@ fn build_cached_nodes(
     nodes: &Option<Vec<StickyNode>>,
     view: &View,
     context: &mut StickyNodeContext,
-    text: helix_core::RopeSlice<'_>,
 ) -> Option<Vec<StickyNode>> {
     // nothing has changed, so the cached result can be returned
     if let Some(nodes) = nodes {
@@ -288,19 +285,11 @@ fn build_cached_nodes(
         }
 
         // While the cached nodes are outside our search-range, pop them, too
-        while cached_nodes
-            .last()
-            .is_some_and(|node| node.byte_range.start >= context.topmost_byte)
-        {
-            let Some(popped) = cached_nodes.pop() else {
-                break;
-            };
-
-            context.topmost_byte = context.topmost_byte.saturating_sub(
-                text.line(text.try_byte_to_line(popped.byte_range.start).ok()?)
-                    .len_bytes(),
-            );
-        }
+        cached_nodes = cached_nodes
+            .iter()
+            .filter(|node| node.byte_range.start >= context.topmost_byte)
+            .cloned()
+            .collect();
 
         return Some(cached_nodes);
     }
