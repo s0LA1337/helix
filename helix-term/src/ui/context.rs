@@ -69,8 +69,9 @@ impl StickyNodeContext {
             return None;
         }
 
-        let top_first_byte =
-            text.line_to_byte(anchor_line + last_nodes.as_ref().map_or(0, |nodes| nodes.len()));
+        let top_first_byte = text
+            .try_line_to_byte(anchor_line + last_nodes.as_ref().map_or(0, |nodes| nodes.len()))
+            .ok()?;
 
         let last_scan_byte = if config.sticky_context.follow_cursor {
             cursor_byte
