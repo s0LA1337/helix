@@ -1,64 +1,43 @@
 ; Credits to nvim-treesitter-context
 
-(interface_declaration
-  body: (_) @context.params
-) @context
+(interface_declaration) @context
 
-(class_declaration
-  body: (_) @context.params
-) @context
+(class_declaration) @context
 
-(enum_declaration
-  body: (_) @context.params
-) @context
+(enum_declaration) @context
 
-(struct_declaration
-  body: (_) @context.params
-) @context
+(struct_declaration) @context
 
-(record_declaration
-  body: (_) @context.params
-) @context
+(record_declaration) @context
 
-(namespace_declaration
-  body: (_) @context.params
-) @context
+(namespace_declaration) @context
 
 (constructor_declaration
-  body: (_) @context.params
-) @context
+    (parameter_list) @context.params
+  ) @context
 
 (destructor_declaration
-  body: (_) @context.params
-) @context
+    (parameter_list) @context.params
+  ) @context
 
 (method_declaration
-  body: (_) @context.params
-) @context
+    (parameter_list) @context.params
+  ) @context
 
-(switch_statement
-  body: (_) @context.params
-) @context
+(switch_statement) @context
 
-(for_statement
-  body: (_) @context.params
-) @context
+(for_statement) @context
 
-(if_statement
-  consequence: (_) @context.params
-) @context
+(if_statement) @context
 
 ([
   (do_statement)
   (while_statement)
 ] @context)
 
-(try_statement
-  body: (_) @context.params
-) @context
+(try_statement) @context
 
-(catch_clause
-  body: (_) @context.params
-) @context
+(catch_clause) @context
 
 (finally_clause) @context
+
