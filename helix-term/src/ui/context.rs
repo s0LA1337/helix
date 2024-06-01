@@ -268,27 +268,23 @@ fn build_cached_nodes(
     view: &View,
     context: &mut StickyNodeContext,
 ) -> Option<Vec<StickyNode>> {
-    // nothing has changed, so the cached result can be returned
     if let Some(nodes) = nodes {
-        if nodes
-            .iter()
-            .any(|node| view.offset.anchor == node.anchor && view.id == node.view_id)
-        {
+        if nodes.iter().any(|node| view.id != node.view_id) {
+            return None;
+        }
+
+        // nothing has changed, so the cached result can be returned
+        if nodes.iter().any(|node| view.offset.anchor == node.anchor) {
             return Some(nodes.iter().take(context.visual_row).cloned().collect());
         }
 
+        // We're not on the same position as before, so instead we can reuse all the previous nodes.
         let mut cached_nodes = nodes.to_vec();
-        // Pop the last node + indicator node (if it exists)
-        if let Some(popped) = cached_nodes.pop() {
-            if popped.indicator.is_some() {
-                _ = cached_nodes.pop();
-            }
-        }
 
         // While the cached nodes are outside our search-range, pop them, too
         cached_nodes = cached_nodes
             .iter()
-            .filter(|node| node.byte_range.start >= context.topmost_byte)
+            .filter(|node| node.byte_range.start > context.topmost_byte)
             .cloned()
             .collect();
 
