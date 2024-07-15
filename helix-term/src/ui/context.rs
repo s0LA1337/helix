@@ -8,11 +8,11 @@ use helix_core::{
     Position,
 };
 
-use helix_view::{
-    editor::Config, graphics::Rect, view::ViewPosition, Document, Theme, View, ViewId,
-};
+use helix_view::{editor::Config, graphics::Rect, Document, Theme, View, ViewId};
 
 use tui::buffer::Buffer as Surface;
+
+use crate::ui::text_decorations::DecorationManager;
 
 use super::{
     document::{render_text, TextRenderer},
@@ -52,12 +52,11 @@ impl StickyNodeContext {
         doc: &Document,
         view: &View,
         config: &Config,
-        cursor_cache: &Option<Option<Position>>,
+        cursor_cache: &Option<Position>,
     ) -> Option<Self> {
         let Some(cursor_cache) = cursor_cache else {
             return None;
         };
-        let cursor_cache = cursor_cache.as_ref()?;
         let text = doc.text().slice(..);
         let viewport = view.inner_area(doc);
         let cursor_byte = text.char_to_byte(doc.selection(view.id).primary().cursor(text));
@@ -94,7 +93,7 @@ pub fn calculate_sticky_nodes(
     doc: &Document,
     view: &View,
     config: &Config,
-    cursor_cache: &Option<Option<Position>>,
+    cursor_cache: &Option<Position>,
 ) -> Option<Vec<StickyNode>> {
     let Some(mut context) = StickyNodeContext::from_context(nodes, doc, view, config, cursor_cache)
     else {
@@ -438,7 +437,8 @@ pub fn render_sticky_context(
 
         // Limit scope of borrowed surface
         {
-            let mut renderer = TextRenderer::new(surface, doc, theme, 0, context_area);
+            let mut renderer =
+                TextRenderer::new(surface, doc, theme, Position::new(0, 0), context_area);
 
             // create the formatting for the basic node render
             let mut formatting = doc.text_format(context_area.width, Some(theme));
@@ -447,17 +447,13 @@ pub fn render_sticky_context(
             render_text(
                 &mut renderer,
                 text,
-                ViewPosition {
-                    anchor: node_start,
-                    ..ViewPosition::default()
-                },
+                node_start,
                 &formatting,
                 &TextAnnotations::default(),
                 syntax_highlights,
                 overlay_highlights,
                 theme,
-                &mut [],
-                &mut [],
+                DecorationManager::default(),
             );
             offset_area.x += first_node_line_end as u16;
         }
@@ -485,7 +481,13 @@ pub fn render_sticky_context(
             );
             offset_area.x += DOTS.len() as u16;
 
-            let mut renderer = TextRenderer::new(surface, doc, theme, end_vis_offset, offset_area);
+            let mut renderer = TextRenderer::new(
+                surface,
+                doc,
+                theme,
+                Position::new(end_vis_offset, 0),
+                offset_area,
+            );
 
             let syntax_highlights = EditorView::doc_syntax_highlights(doc, node_end, 1, theme);
             let overlay_highlights = EditorView::empty_highlight_iter(doc, node_end, 1);
@@ -496,17 +498,13 @@ pub fn render_sticky_context(
             render_text(
                 &mut renderer,
                 text,
-                ViewPosition {
-                    anchor: node_end,
-                    ..ViewPosition::default()
-                },
+                node_end,
                 &formatting,
                 &TextAnnotations::default(),
                 syntax_highlights,
                 overlay_highlights,
                 theme,
-                &mut [],
-                &mut [],
+                DecorationManager::default(),
             );
         }
 
