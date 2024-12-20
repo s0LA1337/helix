@@ -1254,6 +1254,139 @@ pub fn compute_inlay_hints_for_all_views(editor: &mut Editor, jobs: &mut crate::
     }
 }
 
+fn compute_inlay_hints_for_view(
+    view: &View,
+    doc: &Document,
+) -> Option<std::pin::Pin<Box<impl Future<Output = Result<crate::job::Callback, anyhow::Error>>>>> {
+    let view_id = view.id;
+    let doc_id = view.doc;
+
+    let language_server = doc
+        .language_servers_with_feature(LanguageServerFeature::InlayHints)
+        .next()?;
+
+    let (first_line, last_line) = compute_lines(view, doc);
+
+    let new_doc_inlay_hints_id = DocumentInlayHintsId {
+        first_line,
+        last_line,
+    };
+    // Don't recompute the annotations in case nothing has changed about the view
+    if !doc.inlay_hints_oudated
+        && doc
+            .inlay_hints(view_id)
+            .map_or(false, |dih| dih.id == new_doc_inlay_hints_id)
+    {
+        return None;
+    }
+
+    let doc_text = doc.text();
+    let doc_slice = doc_text.slice(..);
+    let first_char_in_range = doc_slice.line_to_char(first_line);
+    let last_char_in_range = doc_slice.line_to_char(last_line);
+
+    let range = helix_lsp::util::range_to_lsp_range(
+        doc_text,
+        helix_core::Range::new(first_char_in_range, last_char_in_range),
+        language_server.offset_encoding(),
+    );
+
+    let offset_encoding = language_server.offset_encoding();
+
+    let callback = super::make_job_callback(
+        language_server.text_document_range_inlay_hints(doc.identifier(), range, None)?,
+        move |editor, _compositor, response: Option<Vec<lsp::InlayHint>>| {
+            // The config was modified or the window was closed while the request was in flight
+            if !editor.config().lsp.display_inlay_hints || editor.tree.try_get(view_id).is_none() {
+                return;
+            }
+
+            // Add annotations to relevant document, not the current one (it may have changed in between)
+            let doc = match editor.documents.get_mut(&doc_id) {
+                Some(doc) => doc,
+                None => return,
+            };
+
+            // If we have neither hints nor an LSP, empty the inlay hints since they're now oudated
+            let mut hints = match response {
+                Some(hints) if !hints.is_empty() => hints,
+                _ => {
+                    doc.set_inlay_hints(
+                        view_id,
+                        DocumentInlayHints::empty_with_id(new_doc_inlay_hints_id),
+                    );
+                    doc.inlay_hints_oudated = false;
+                    return;
+                }
+            };
+
+            // Most language servers will already send them sorted but ensure this is the case to
+            // avoid errors on our end.
+            hints.sort_by_key(|inlay_hint| inlay_hint.position);
+
+            let mut padding_before_inlay_hints = Vec::new();
+            let mut type_inlay_hints = Vec::new();
+            let mut parameter_inlay_hints = Vec::new();
+            let mut other_inlay_hints = Vec::new();
+            let mut padding_after_inlay_hints = Vec::new();
+
+            let doc_text = doc.text();
+
+            for hint in hints {
+                let char_idx =
+                    match helix_lsp::util::lsp_pos_to_pos(doc_text, hint.position, offset_encoding)
+                    {
+                        Some(pos) => pos,
+                        // Skip inlay hints that have no "real" position
+                        None => continue,
+                    };
+
+                let label = match hint.label {
+                    lsp::InlayHintLabel::String(s) => s,
+                    lsp::InlayHintLabel::LabelParts(parts) => parts
+                        .into_iter()
+                        .map(|p| p.value)
+                        .collect::<Vec<_>>()
+                        .join(""),
+                };
+
+                let inlay_hints_vec = match hint.kind {
+                    Some(lsp::InlayHintKind::TYPE) => &mut type_inlay_hints,
+                    Some(lsp::InlayHintKind::PARAMETER) => &mut parameter_inlay_hints,
+                    // We can't warn on unknown kind here since LSPs are free to set it or not, for
+                    // example Rust Analyzer does not: every kind will be `None`.
+                    _ => &mut other_inlay_hints,
+                };
+
+                if let Some(true) = hint.padding_left {
+                    padding_before_inlay_hints.push(InlineAnnotation::new(char_idx, " "));
+                }
+
+                inlay_hints_vec.push(InlineAnnotation::new(char_idx, label));
+
+                if let Some(true) = hint.padding_right {
+                    padding_after_inlay_hints.push(InlineAnnotation::new(char_idx, " "));
+                }
+            }
+
+            doc.set_inlay_hints(
+                view_id,
+                DocumentInlayHints {
+                    id: new_doc_inlay_hints_id,
+                    type_inlay_hints,
+                    parameter_inlay_hints,
+                    other_inlay_hints,
+                    padding_before_inlay_hints,
+                    padding_after_inlay_hints,
+                },
+            );
+            doc.inlay_hints_oudated = false;
+        },
+    );
+
+    Some(callback)
+}
+
 pub fn compute_color_swatches_for_all_views(editor: &mut Editor, jobs: &mut crate::job::Jobs) {
     if !editor.config().lsp.display_color_swatches {
         return;
@@ -1382,139 +1515,6 @@ fn compute_color_swatches_for_view(
                 },
             );
             doc.color_swatches_outdated = false;
-        },
-    );
-
-    Some(callback)
-}
-
-fn compute_inlay_hints_for_view(
-    view: &View,
-    doc: &Document,
-) -> Option<std::pin::Pin<Box<impl Future<Output = Result<crate::job::Callback, anyhow::Error>>>>> {
-    let view_id = view.id;
-    let doc_id = view.doc;
-
-    let language_server = doc
-        .language_servers_with_feature(LanguageServerFeature::InlayHints)
-        .next()?;
-
-    let (first_line, last_line) = compute_lines(view, doc);
-
-    let new_doc_inlay_hints_id = DocumentInlayHintsId {
-        first_line,
-        last_line,
-    };
-    // Don't recompute the annotations in case nothing has changed about the view
-    if !doc.inlay_hints_oudated
-        && doc
-            .inlay_hints(view_id)
-            .map_or(false, |dih| dih.id == new_doc_inlay_hints_id)
-    {
-        return None;
-    }
-
-    let doc_text = doc.text();
-    let doc_slice = doc_text.slice(..);
-    let first_char_in_range = doc_slice.line_to_char(first_line);
-    let last_char_in_range = doc_slice.line_to_char(last_line);
-
-    let range = helix_lsp::util::range_to_lsp_range(
-        doc_text,
-        helix_core::Range::new(first_char_in_range, last_char_in_range),
-        language_server.offset_encoding(),
-    );
-
-    let offset_encoding = language_server.offset_encoding();
-
-    let callback = super::make_job_callback(
-        language_server.text_document_range_inlay_hints(doc.identifier(), range, None)?,
-        move |editor, _compositor, response: Option<Vec<lsp::InlayHint>>| {
-            // The config was modified or the window was closed while the request was in flight
-            if !editor.config().lsp.display_inlay_hints || editor.tree.try_get(view_id).is_none() {
-                return;
-            }
-
-            // Add annotations to relevant document, not the current one (it may have changed in between)
-            let doc = match editor.documents.get_mut(&doc_id) {
-                Some(doc) => doc,
-                None => return,
-            };
-
-            // If we have neither hints nor an LSP, empty the inlay hints since they're now oudated
-            let mut hints = match response {
-                Some(hints) if !hints.is_empty() => hints,
-                _ => {
-                    doc.set_inlay_hints(
-                        view_id,
-                        DocumentInlayHints::empty_with_id(new_doc_inlay_hints_id),
-                    );
-                    doc.inlay_hints_oudated = false;
-                    return;
-                }
-            };
-
-            // Most language servers will already send them sorted but ensure this is the case to
-            // avoid errors on our end.
-            hints.sort_by_key(|inlay_hint| inlay_hint.position);
-
-            let mut padding_before_inlay_hints = Vec::new();
-            let mut type_inlay_hints = Vec::new();
-            let mut parameter_inlay_hints = Vec::new();
-            let mut other_inlay_hints = Vec::new();
-            let mut padding_after_inlay_hints = Vec::new();
-
-            let doc_text = doc.text();
-
-            for hint in hints {
-                let char_idx =
-                    match helix_lsp::util::lsp_pos_to_pos(doc_text, hint.position, offset_encoding)
-                    {
-                        Some(pos) => pos,
-                        // Skip inlay hints that have no "real" position
-                        None => continue,
-                    };
-
-                let label = match hint.label {
-                    lsp::InlayHintLabel::String(s) => s,
-                    lsp::InlayHintLabel::LabelParts(parts) => parts
-                        .into_iter()
-                        .map(|p| p.value)
-                        .collect::<Vec<_>>()
-                        .join(""),
-                };
-
-                let inlay_hints_vec = match hint.kind {
-                    Some(lsp::InlayHintKind::TYPE) => &mut type_inlay_hints,
-                    Some(lsp::InlayHintKind::PARAMETER) => &mut parameter_inlay_hints,
-                    // We can't warn on unknown kind here since LSPs are free to set it or not, for
-                    // example Rust Analyzer does not: every kind will be `None`.
-                    _ => &mut other_inlay_hints,
-                };
-
-                if let Some(true) = hint.padding_left {
-                    padding_before_inlay_hints.push(InlineAnnotation::new(char_idx, " "));
-                }
-
-                inlay_hints_vec.push(InlineAnnotation::new(char_idx, label));
-
-                if let Some(true) = hint.padding_right {
-                    padding_after_inlay_hints.push(InlineAnnotation::new(char_idx, " "));
-                }
-            }
-
-            doc.set_inlay_hints(
-                view_id,
-                DocumentInlayHints {
-                    id: new_doc_inlay_hints_id,
-                    type_inlay_hints,
-                    parameter_inlay_hints,
-                    other_inlay_hints,
-                    padding_before_inlay_hints,
-                    padding_after_inlay_hints,
-                },
-            );
-            doc.inlay_hints_oudated = false;
         },
     );
 
