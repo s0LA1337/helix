@@ -1254,6 +1254,24 @@ pub fn compute_inlay_hints_for_all_views(editor: &mut Editor, jobs: &mut crate::
     }
 }
 
+fn compute_lines(view: &View, doc: &Document) -> (usize, usize) {
+    // Compute ~3 times the current view height of color swatches, that way some scrolling
+    // will not show half the view with hints and half without while still being faster
+    // than computing all the hints for the full file (which could be dozens of time
+    // longer than the view is).
+    let doc_text = doc.text();
+    let len_lines = doc_text.len_lines();
+
+    let view_height = view.inner_height();
+    let first_visible_line =
+        doc_text.char_to_line(doc.view_offset(view.id).anchor.min(doc_text.len_chars()));
+    let first_line = first_visible_line.saturating_sub(view_height);
+    let last_line = first_visible_line
+        .saturating_add(view_height.saturating_mul(2))
+        .min(len_lines);
+    (first_line, last_line)
+}
+
 fn compute_inlay_hints_for_view(
     view: &View,
     doc: &Document,
@@ -1401,24 +1419,6 @@ pub fn compute_color_swatches_for_all_views(editor: &mut Editor, jobs: &mut crat
             jobs.callback(callback);
         }
     }
-}
-
-fn compute_lines(view: &View, doc: &Document) -> (usize, usize) {
-    // Compute ~3 times the current view height of color swatches, that way some scrolling
-    // will not show half the view with hints and half without while still being faster
-    // than computing all the hints for the full file (which could be dozens of time
-    // longer than the view is).
-    let doc_text = doc.text();
-    let len_lines = doc_text.len_lines();
-
-    let view_height = view.inner_height();
-    let first_visible_line =
-        doc_text.char_to_line(doc.view_offset(view.id).anchor.min(doc_text.len_chars()));
-    let first_line = first_visible_line.saturating_sub(view_height);
-    let last_line = first_visible_line
-        .saturating_add(view_height.saturating_mul(2))
-        .min(len_lines);
-    (first_line, last_line)
 }
 
 fn compute_color_swatches_for_view(
