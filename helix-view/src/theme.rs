@@ -357,6 +357,14 @@ impl Theme {
         })
     }
 
+    pub fn rainbow_length(&self) -> usize {
+        self.rainbow_length
+    }
+
+    pub fn get_rainbow(&self, index: usize) -> Style {
+        self.highlights[index % self.rainbow_length]
+    }
+
     fn from_toml(value: Value) -> (Self, Vec<String>) {
         if let Value::Table(table) = value {
             Theme::from_keys(table)
@@ -431,10 +439,6 @@ impl Theme {
         };
 
         (theme, warnings)
-    }
-
-    pub fn rainbow_length(&self) -> usize {
-        self.rainbow_length
     }
 }
 
@@ -711,7 +715,10 @@ mod tests {
         let invalid_hex_code = theme.get("invalid_hex_code").unwrap();
         let parse_result = palette.parse_style_array(invalid_hex_code.clone());
 
-        assert_eq!(Err("Malformed hexcode: #f00".to_string()), parse_result);
+        assert_eq!(
+            Err("Theme: malformed hexcode: #f00".to_string()),
+            parse_result
+        );
 
         let theme = toml::toml! { not_an_array = { red = "#ff0000" } };
         let not_an_array = theme.get("not_an_array").unwrap();
