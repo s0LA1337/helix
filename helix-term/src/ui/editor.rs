@@ -48,6 +48,7 @@ pub struct EditorView {
     sticky_nodes: Option<Vec<StickyNode>>,
     /// Tracks if the terminal window is focused by reaction to terminal focus events
     terminal_focused: bool,
+    current_timeout_passes: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +73,7 @@ impl EditorView {
             spinners: ProgressSpinners::default(),
             sticky_nodes: None,
             terminal_focused: true,
+            current_timeout_passes: 0,
         }
     }
 
@@ -1194,6 +1196,14 @@ impl EditorView {
 
     pub fn handle_idle_timeout(&mut self, cx: &mut commands::Context) -> EventResult {
         commands::compute_lsp_annotations_for_all_views(cx.editor, cx.jobs);
+
+        if self.current_timeout_passes == cx.editor.config().timeout_passes {
+            let (view, doc) = current!(cx.editor);
+            doc.append_changes_to_history(view);
+            self.current_timeout_passes = 0;
+        } else {
+            self.current_timeout_passes += 1;
+        }
 
         EventResult::Ignored(None)
     }
